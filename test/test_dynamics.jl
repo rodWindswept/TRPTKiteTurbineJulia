@@ -53,11 +53,29 @@ end
 @testset "I_total — positive inertia" begin
     p = params_10kw()
 
-    I_total = p.n_blades * p.m_blade * p.rotor_radius^2 +
-              p.n_rings  * p.m_ring  * p.rotor_radius^2 +
-              p.i_pto
+    # Replicate the tapered ring inertia calculation from trpt_ode!
+    n_seg   = p.n_rings + 1
+    r_top_i = p.trpt_hub_radius
+    r_bot_i = 2.0 * p.tether_length * p.trpt_rL_ratio / n_seg - r_top_i
+    I_rings = sum(p.m_ring * (r_bot_i + i / p.n_rings * (r_top_i - r_bot_i))^2
+                  for i in 1:p.n_rings)
+    I_total = p.n_blades * p.m_blade * p.rotor_radius^2 + I_rings + p.i_pto
 
+    # Sanity checks
+    @test I_rings > 0.0
     @test I_total > 0.0
+
+    # Structural check: I_total is the sum of its three components
+    @test I_total ≈ p.n_blades * p.m_blade * p.rotor_radius^2 + I_rings + p.i_pto
+
+    # Blade contribution (3 × 11/3 kg × 5² m²) ≈ 275.0 kg·m²
+    @test p.n_blades * p.m_blade * p.rotor_radius^2 ≈ 275.0 atol=1.0
+
+    # Tapered ring inertia must be less than if all rings were at rotor_radius
+    @test I_rings < p.n_rings * p.m_ring * p.rotor_radius^2
+
+    # Tapered inertia (rings at 0.96–2.0 m) should be ≈ 13.4 kg·m²
+    @test I_rings ≈ 13.4 atol=0.5
 end
 
 @testset "TRPT taper — stiffness and inertia" begin

@@ -68,9 +68,10 @@ function trpt_ode!(du, u, p::SystemParams, t)
     # Primary kinematic guard: average segment twist ≥ 0.95π means segments have wound
     # past the tensegrity stability limit (shaft has collapsed kinematically).
     # Secondary stress guard: ground-end segment (smallest r, softest spring) experiences
-    # the most deflection; if that twist (τ/k_bottom) also exceeds 0.95π, collapse.
+    # the most deflection; ground-end deflection = α_total × (k_eff/k_bottom). If that
+    # exceeds 0.95π, collapse.
     k_bottom = spring_coeff * r_bottom
-    α_bottom = abs(τ_transmitted) / k_bottom
+    α_bottom = abs(u[1]) * k_eff / k_bottom   # ground-end segment deflection (linear model)
     if abs(α_avg) >= 0.95 * π || α_bottom >= 0.95 * π
         τ_transmitted = 0.0
     end
@@ -127,7 +128,7 @@ function instantaneous_power(p::SystemParams, u::Vector{Float64})::Float64
     τ_transmitted = k_eff * sin(α_avg)
 
     k_bottom = spring_coeff * r_bottom
-    α_bottom = abs(τ_transmitted) / k_bottom
+    α_bottom = abs(u[1]) * k_eff / k_bottom   # ground-end segment deflection (linear model)
     if abs(α_avg) >= 0.95 * π || α_bottom >= 0.95 * π
         τ_transmitted = 0.0
     end
