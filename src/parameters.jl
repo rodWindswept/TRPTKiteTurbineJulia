@@ -1,8 +1,11 @@
 # src/parameters.jl
 # Physical constants and preset configurations for the TRPT Kite Turbine Simulator.
 # All numerical values derived from:
-#   - "Rotary AWES Julia Simulation Framework.pdf"  (Framework PDF)
-#   - "Kite Turbine Mass Scaling Analysis.pdf"       (Mass Scaling PDF)
+#   - "Rotary AWES Julia Simulation Framework.pdf"         (Framework PDF)
+#   - "Kite Turbine Mass Scaling Analysis.pdf"              (Mass Scaling PDF)
+#   - "Design Reasoning Report - General Release.pdf" §5.2  (DRR)
+#   - data_collection_v3.xlsx                               (rotor geometry survey)
+#   - Rotor_TRTP_Sizing_Iteration2.xlsx                     (AeroDyn BEM simulations)
 
 """
     SystemParams
@@ -35,7 +38,11 @@ struct SystemParams
     m_blade::Float64          # Mass per blade (kg)
 
     # Aerodynamics
-    cp::Float64               # Rotor power coefficient; Framework PDF §5.3 ≈ 0.15
+    # NOTE: rotor_radius is the aerodynamic outer radius used in the power formula
+    # (P = ½ρv³πR²Cp cos³β) and the TRPT inertia/stiffness terms.  In physical
+    # hardware the TRPT hub ring radius is smaller (~0.19×R from AeroDyn sizing
+    # data).  A single rotor_radius is a documented simplification (design doc §6).
+    cp::Float64               # Rotor power coefficient; AeroDyn BEM ≈ 0.22 (NACA4412, 3-blade)
 
     # Ground station — Mass Scaling PDF §"Drivetrain Mass and Inertia Matching"
     i_pto::Float64            # Total PTO rotational inertia (kg·m²)
@@ -45,8 +52,11 @@ end
 """
     params_10kw()
 
-10 kW prototype configuration using empirically validated values from the PDFs and
-the Design Reasoning Report (DRR §5.2).
+10 kW prototype configuration — empirically validated from PDFs, DRR, and AeroDyn BEM.
+
+Rated operating point (DRR; AeroDyn sizing data):
+  - Rated wind speed : 11 m/s (all AeroDyn simulations in Rotor_TRTP_Sizing_Iteration2.xlsx)
+  - Elevation angle  : 30° (as physically built; newer designs optimise at 20°)
 
 Mass budget (Mass Scaling PDF §"Static Lift Kite Mass Bottleneck"):
   - Rotor mass total : 11 kg (3 blades × 3.667 kg each)
@@ -58,6 +68,11 @@ Tether geometry (DRR §5.2):
   - Torque rings every 2 m → 14 intermediate rings  ((30/2) − 1 = 14)
   - Each ring ≈ 400 g (12 mm CFRP tubes + aluminium clevis connectors)
 
+Aerodynamics (Rotor_TRTP_Sizing_Iteration2.xlsx AeroDyn BEM, NACA4412 profile):
+  - Cp ≈ 0.22 at optimal TSR ≈ 4.1–4.2 (3-blade, 20°–30° elevation)
+    [4kW: Cp=0.232, 7kW: Cp=0.223, 12kW: Cp=0.227 — consistent across sizes]
+  - Previous Framework PDF value (0.15) was a conservative proxy; AeroDyn gives ≈0.22
+
 Ground inertia (Mass Scaling PDF §"Drivetrain Mass and Inertia Matching"):
   - I_wheel = 0.019 kg·m², I_gen = 0.040 kg·m² → I_pto = 0.059 kg·m²
 """
@@ -66,14 +81,14 @@ function params_10kw()::SystemParams
     m_ring  = 0.4           # ~400 g per ring (DRR §5.2: CFRP tubes + clevis connectors)
     i_pto   = 0.019 + 0.040 # wheel + generator (Mass Scaling PDF §"Drivetrain Mass")
 
-    # Hub altitude = tether_length × sin(elevation_angle) = 30 × 0.5 = 15 m
-    # h_ref set to hub altitude so v_wind_ref is the wind speed at the hub
+    # Hub altitude = tether_length × sin(elevation_angle) = 30 × sin(30°) = 15 m
+    # h_ref = hub altitude; v_wind_ref is rated hub wind speed (11 m/s, from DRR / AeroDyn data)
     return SystemParams(
         1.225,           # rho (kg/m³)
-        10.0,            # v_wind_ref (m/s) at hub altitude
+        11.0,            # v_wind_ref (m/s) at hub — rated wind speed (DRR; AeroDyn sizing)
         15.0,            # h_ref (m) — hub altitude = 30 × sin(π/6)
-        π / 6,           # elevation_angle = 30° per Mass Scaling PDF
-        5.0,             # rotor_radius R (m) — Framework PDF §5.3
+        π / 6,           # elevation_angle = 30° (as physically built; DRR)
+        5.0,             # rotor_radius R (m) — Framework PDF §5.3 (aerodynamic outer radius)
         30.0,            # tether_length L₀ (m) — DRR §5.2 "For a 30m TRPT"
         5,               # n_lines — DRR §5.2 "5 tethers along the length"
         0.003,           # tether_diameter (m) — DRR §5.2: 3 mm Dyneema type 01505
@@ -82,7 +97,7 @@ function params_10kw()::SystemParams
         m_ring,          # m_ring (kg)
         3,               # n_blades — Framework PDF §5.3
         m_blade,         # m_blade (kg)
-        0.15,            # cp — Framework PDF §5.3
+        0.22,            # cp — AeroDyn BEM (Rotor_TRTP_Sizing_Iteration2.xlsx); replaces 0.15 proxy
         i_pto,           # i_pto (kg·m²)
         5000.0,          # c_pto (N·m·s/rad) — Framework PDF §5.3
     )

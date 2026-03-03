@@ -35,8 +35,9 @@ include("../src/parameters.jl")
     # Ground station inertia — Mass Scaling PDF §"Drivetrain Mass and Inertia Matching"
     @test p.i_pto ≈ 0.059 atol=0.001
 
-    # Operating parameters
-    @test p.cp ≈ 0.15
+    # Operating parameters — AeroDyn BEM (Rotor_TRTP_Sizing_Iteration2.xlsx)
+    @test p.v_wind_ref ≈ 11.0          # rated hub wind speed
+    @test p.cp ≈ 0.22 atol=0.01        # NACA4412 3-blade BEM; 0.222–0.234 across sizes
     @test p.c_pto ≈ 5000.0
 end
 
