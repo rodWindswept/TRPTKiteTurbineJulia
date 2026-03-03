@@ -94,6 +94,11 @@ end
     @test k_eff < k_top
     @test k_eff < k_bottom   # series combination is always less stiff than weakest element
 
+    # Stress guard reachability: ground-end deflection threshold must be lower than
+    # kinematic threshold — i.e. k_bottom/k_eff < n_seg.
+    # If this fails the secondary collapse guard is unreachable for this parameter set.
+    @test k_bottom / k_eff < n_seg
+
     # Power is positive at normal operating state
     @test instantaneous_power(p, [0.5, 2.0]) > 0.0
 
