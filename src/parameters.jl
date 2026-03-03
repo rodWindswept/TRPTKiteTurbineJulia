@@ -45,32 +45,40 @@ end
 """
     params_10kw()
 
-10 kW prototype configuration using empirically validated values from the PDFs.
+10 kW prototype configuration using empirically validated values from the PDFs and
+the Design Reasoning Report (DRR §5.2).
 
 Mass budget (Mass Scaling PDF §"Static Lift Kite Mass Bottleneck"):
   - Rotor mass total : 11 kg (3 blades × 3.667 kg each)
-  - TRPT shaft mass  : 6 kg
-  - Total airborne   : 17 kg
+  - TRPT shaft mass  : ~6.6 kg  (14 rings × 0.4 kg + 5 lines × 30 m × 0.006 kg/m)
+  - Total airborne   : ~17.6 kg ≈ 17 kg
+
+Tether geometry (DRR §5.2):
+  - 5 Dyneema lines, 3 mm diameter, 30 m total length
+  - Torque rings every 2 m → 14 intermediate rings  ((30/2) − 1 = 14)
+  - Each ring ≈ 400 g (12 mm CFRP tubes + aluminium clevis connectors)
 
 Ground inertia (Mass Scaling PDF §"Drivetrain Mass and Inertia Matching"):
   - I_wheel = 0.019 kg·m², I_gen = 0.040 kg·m² → I_pto = 0.059 kg·m²
 """
 function params_10kw()::SystemParams
     m_blade = 11.0 / 3.0   # 3 blades totalling 11 kg per Mass Scaling PDF
-    m_ring  = 2.5           # Framework PDF §5.3 example value
+    m_ring  = 0.4           # ~400 g per ring (DRR §5.2: CFRP tubes + clevis connectors)
     i_pto   = 0.019 + 0.040 # wheel + generator (Mass Scaling PDF §"Drivetrain Mass")
 
+    # Hub altitude = tether_length × sin(elevation_angle) = 30 × 0.5 = 15 m
+    # h_ref set to hub altitude so v_wind_ref is the wind speed at the hub
     return SystemParams(
         1.225,           # rho (kg/m³)
-        10.0,            # v_wind_ref (m/s)
-        150.0,           # h_ref (m) = tether length
+        10.0,            # v_wind_ref (m/s) at hub altitude
+        15.0,            # h_ref (m) — hub altitude = 30 × sin(π/6)
         π / 6,           # elevation_angle = 30° per Mass Scaling PDF
         5.0,             # rotor_radius R (m) — Framework PDF §5.3
-        150.0,           # tether_length L₀ (m)
-        6,               # n_lines — Framework PDF §5.3
-        0.004,           # tether_diameter (m) — 4 mm Dyneema
+        30.0,            # tether_length L₀ (m) — DRR §5.2 "For a 30m TRPT"
+        5,               # n_lines — DRR §5.2 "5 tethers along the length"
+        0.003,           # tether_diameter (m) — DRR §5.2: 3 mm Dyneema type 01505
         100e9,           # e_modulus (Pa) — Dyneema ~100 GPa
-        10,              # n_rings — Framework PDF §5.3
+        14,              # n_rings — DRR §5.2: rings every 2 m → (30/2)−1 = 14
         m_ring,          # m_ring (kg)
         3,               # n_blades — Framework PDF §5.3
         m_blade,         # m_blade (kg)

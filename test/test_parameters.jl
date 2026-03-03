@@ -7,15 +7,26 @@ include("../src/parameters.jl")
 
     # Geometry — Framework PDF §5.3
     @test p.rotor_radius ≈ 5.0
-    @test p.tether_length ≈ 150.0
-    @test p.n_lines == 6
-    @test p.n_rings == 10
-    @test p.n_blades == 3
     @test p.elevation_angle ≈ π/6 atol=1e-6
+    @test p.n_blades == 3
+
+    # TRPT geometry — Design Reasoning Report §5.2
+    @test p.tether_length ≈ 30.0        # "For a 30m TRPT"
+    @test p.n_lines == 5                 # "5 tethers along the length"
+    @test p.n_rings == 14                # rings every 2m → (30/2)−1 = 14
+    @test p.tether_diameter ≈ 0.003     # 3mm Dyneema type 01505
+    @test p.m_ring ≈ 0.4 atol=0.01      # ~400g per ring (CFRP tubes + connectors)
+
+    # Hub altitude consistency: h_ref = tether_length × sin(elevation_angle)
+    @test p.h_ref ≈ p.tether_length * sin(p.elevation_angle) atol=0.1
 
     # Tether material
-    @test p.tether_diameter ≈ 0.004
     @test p.e_modulus ≈ 100e9
+
+    # TRPT shaft mass sanity: rings + tether ≈ 6.6 kg (DRR §5.2)
+    tether_mass = p.n_lines * p.tether_length * 0.006  # 6 g/m Dyneema
+    shaft_mass  = p.n_rings * p.m_ring + tether_mass
+    @test shaft_mass ≈ 6.6 atol=0.5
 
     # Mass values — Mass Scaling PDF §"Static Lift Kite Mass Bottleneck"
     total_rotor_mass = p.n_blades * p.m_blade
