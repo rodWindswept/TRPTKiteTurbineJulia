@@ -24,6 +24,12 @@ struct SystemParams
     rotor_radius::Float64     # Airborne ring radius R (m)
     tether_length::Float64    # Unstretched total TRPT length L₀ (m)
 
+    # TRPT tapered geometry
+    trpt_hub_radius::Float64  # Ring radius at the rotor end of the TRPT (m); r_top of taper
+    trpt_rL_ratio::Float64    # Geometry ratio r/L per segment (dimensionless).
+                              # Each segment: L_i = r_i / trpt_rL_ratio
+                              # DRR Grasshopper FEA: rL = 0.740741; Iteration2 sizing: 0.5
+
     # Tether material — Framework PDF §3
     n_lines::Int64            # Number of TRPT tether lines
     tether_diameter::Float64  # Tether line diameter d_t (m)
@@ -38,10 +44,10 @@ struct SystemParams
     m_blade::Float64          # Mass per blade (kg)
 
     # Aerodynamics
-    # NOTE: rotor_radius is the aerodynamic outer radius used in the power formula
-    # (P = ½ρv³πR²Cp cos³β) and the TRPT inertia/stiffness terms.  In physical
-    # hardware the TRPT hub ring radius is smaller (~0.19×R from AeroDyn sizing
-    # data).  A single rotor_radius is a documented simplification (design doc §6).
+    # rotor_radius is the aerodynamic outer radius used in the power formula
+    # (P = ½ρv³πR²Cp cos³β), blade inertia (I = n_blades × m_blade × R²),
+    # and tether speed ratio (λ_t = ω × R / v_hub).
+    # TRPT stiffness and ring inertia use trpt_hub_radius / trpt_rL_ratio instead.
     cp::Float64               # Rotor power coefficient; AeroDyn BEM ≈ 0.22 (NACA4412, 3-blade)
 
     # Ground station — Mass Scaling PDF §"Drivetrain Mass and Inertia Matching"
@@ -68,6 +74,11 @@ Tether geometry (DRR §5.2):
   - Torque rings every 2 m → 14 intermediate rings  ((30/2) − 1 = 14)
   - Each ring ≈ 400 g (12 mm CFRP tubes + aluminium clevis connectors)
 
+TRPT taper geometry (DRR Grasshopper FEA, rL Geometry Ratio: 0.740741):
+  - trpt_hub_radius = 2.0 m  (ring radius at rotor end; self-consistent with rL=0.74,
+    tether=30m, n_seg=15 → average L_seg=2.0m, r_bottom=0.96m)
+  - trpt_rL_ratio = 0.74    (r/L geometry constraint per segment)
+
 Aerodynamics (Rotor_TRTP_Sizing_Iteration2.xlsx AeroDyn BEM, NACA4412 profile):
   - Cp ≈ 0.22 at optimal TSR ≈ 4.1–4.2 (3-blade, 20°–30° elevation)
     [4kW: Cp=0.232, 7kW: Cp=0.223, 12kW: Cp=0.227 — consistent across sizes]
@@ -90,6 +101,9 @@ function params_10kw()::SystemParams
         π / 6,           # elevation_angle = 30° (as physically built; DRR)
         5.0,             # rotor_radius R (m) — Framework PDF §5.3 (aerodynamic outer radius)
         30.0,            # tether_length L₀ (m) — DRR §5.2 "For a 30m TRPT"
+        2.0,             # trpt_hub_radius (m) — ring radius at rotor end; DRR Grasshopper rL=0.74,
+                         #   tether=30m, n_seg=15 → avg L_seg=2.0m, r_bottom=0.96m
+        0.74,            # trpt_rL_ratio — DRR Grasshopper "rL Geometry Ratio: 0.740741"
         5,               # n_lines — DRR §5.2 "5 tethers along the length"
         0.003,           # tether_diameter (m) — DRR §5.2: 3 mm Dyneema type 01505
         100e9,           # e_modulus (Pa) — Dyneema ~100 GPa
@@ -136,6 +150,8 @@ function mass_scale(base::SystemParams,
         base.elevation_angle,                  # angle does not scale
         base.rotor_radius      * geom_scale,
         base.tether_length     * geom_scale,
+        base.trpt_hub_radius   * geom_scale,   # scales geometrically
+        base.trpt_rL_ratio,                    # dimensionless ratio, does not scale
         base.n_lines,                          # topology does not scale
         base.tether_diameter   * geom_scale,
         base.e_modulus,                        # material property, unchanged

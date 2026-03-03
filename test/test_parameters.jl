@@ -77,3 +77,28 @@ end
     @test p20.rho == p10.rho
     @test p20.elevation_angle == p10.elevation_angle
 end
+
+@testset "TRPT taper geometry — 10 kW preset" begin
+    p = params_10kw()
+
+    # rL ratio from DRR Grasshopper
+    @test p.trpt_rL_ratio ≈ 0.74 atol=0.01
+
+    # Hub radius at rotor end
+    @test p.trpt_hub_radius ≈ 2.0 atol=0.01
+
+    # Derived r_bottom must be positive
+    n_seg = p.n_rings + 1
+    r_bottom = 2.0 * p.tether_length * p.trpt_rL_ratio / n_seg - p.trpt_hub_radius
+    @test r_bottom > 0.0
+
+    # Average segment length = average_r / rL_ratio should ≈ tether_length / n_seg
+    avg_r = (p.trpt_hub_radius + r_bottom) / 2.0
+    @test avg_r / p.trpt_rL_ratio ≈ p.tether_length / n_seg atol=0.01
+
+    # Mass scaling preserves rL_ratio, scales hub radius geometrically
+    p50 = params_50kw()
+    @test p50.trpt_rL_ratio ≈ p.trpt_rL_ratio
+    scale = (50.0 / 10.0)^(1.0/3.0)
+    @test p50.trpt_hub_radius ≈ p.trpt_hub_radius * scale atol=0.01
+end

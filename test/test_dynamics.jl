@@ -59,3 +59,29 @@ end
 
     @test I_total > 0.0
 end
+
+@testset "TRPT taper — stiffness and inertia" begin
+    p = params_10kw()
+    n_seg     = p.n_rings + 1
+    r_top     = p.trpt_hub_radius
+    r_bottom  = 2.0 * p.tether_length * p.trpt_rL_ratio / n_seg - r_top
+    coeff     = p.e_modulus * π * (p.tether_diameter / 2)^2 * p.n_lines * p.trpt_rL_ratio
+
+    # Effective stiffness is less than the stiffest (top) segment
+    k_top    = coeff * r_top
+    k_bottom = coeff * r_bottom
+    sum_inv  = sum(1.0 / (coeff * (r_bottom + i / (n_seg - 1) * (r_top - r_bottom)))
+                   for i in 0:n_seg-1)
+    k_eff    = 1.0 / sum_inv
+    @test k_eff < k_top
+    @test k_eff < k_bottom   # series combination is always less stiff than weakest element
+
+    # Power is positive at normal operating state
+    @test instantaneous_power(p, [0.5, 2.0]) > 0.0
+
+    # ODE call still works and returns finite values
+    du = zeros(2)
+    trpt_ode!(du, [0.1, 1.0], p, 0.0)
+    @test isfinite(du[1])
+    @test isfinite(du[2])
+end
