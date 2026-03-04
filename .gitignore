@@ -1,0 +1,12 @@
+# Generated output files
+output/*.png
+output/*.csv
+output/*.gif
+
+# Julia
+*.jl.cov
+*.jl.mem
+.julia/
+
+# OS
+.DS_Store
