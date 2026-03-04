@@ -2,7 +2,7 @@
 
 julia_version = "1.12.5"
 manifest_format = "2.0"
-project_hash = "003493d175a736e46e62c76fb210677945b73544"
+project_hash = "89dc049f5ca8d35e8aea38a9cbf482ab0820b1f6"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "f7304359109c768cf32dc5fa2d371565bb63b68a"
@@ -2994,7 +2994,7 @@ uuid = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 version = "1.0.3"
 
 [[deps.TRPTKiteTurbineSimulator]]
-deps = ["CSV", "DataFrames", "DifferentialEquations", "GLMakie", "KiteModels", "Statistics"]
+deps = ["CSV", "DataFrames", "DifferentialEquations", "GLMakie", "KiteModels", "KiteUtils", "Statistics"]
 path = "."
 uuid = "a1b2c3d4-0000-0000-0000-000000000001"
 version = "0.1.0"
