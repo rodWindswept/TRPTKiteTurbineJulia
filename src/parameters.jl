@@ -131,17 +131,20 @@ end
     mass_scale(base, base_power_kw, target_power_kw)
 
 Scale a SystemParams to a new rated power using:
-- Geometric linear scaling: x = (target/base)^(1/3) for all lengths
+- Aerodynamic length scaling: x = (target/base)^(1/2) for all lengths.
+  Rationale: P_aero ∝ R² (swept area), so R ∝ P^(1/2). Confirmed by AeroDyn BEM data:
+  4 kW R=2.8 m → 12 kW R=4.8 m ≈ (12/4)^(1/2) × 2.8 ✓
 - Empirical mass exponent 1.35 (Mass Scaling PDF §"The Empirical Mass Exponent"):
   m_scaled = m_base × (target/base)^1.35
-- PTO inertia: I ∝ mass × R² → exponent = 1.35 + 2/3 = 2.017 ≈ (1.35 + 2×1/3)
+- PTO inertia: I ∝ m × R² → exponent = 1.35 + 2×(1/2) = 2.35
+- PTO damping: c_pto ∝ P/ω² where ω ∝ P^(-1/2) → c_pto ∝ P^2
 """
 function mass_scale(base::SystemParams,
                     base_power_kw::Float64,
                     target_power_kw::Float64)::SystemParams
     power_ratio = target_power_kw / base_power_kw
-    geom_scale  = power_ratio^(1.0/3.0)   # linear dimension scale factor
-    mass_factor = power_ratio^1.35         # empirical mass exponent
+    geom_scale  = power_ratio^(1.0/2.0)   # linear dimension scale: R ∝ P^(1/2) since P ∝ R²
+    mass_factor = power_ratio^1.35         # empirical mass exponent (Mass Scaling PDF)
 
     return SystemParams(
         base.rho,
@@ -160,7 +163,7 @@ function mass_scale(base::SystemParams,
         base.n_blades,                         # topology does not scale
         base.m_blade           * mass_factor,
         base.cp,                               # aerodynamic constant, unchanged
-        base.i_pto             * (power_ratio^(5.0/3.0)),  # I ∝ m·R²
-        base.c_pto             * geom_scale,
+        base.i_pto             * mass_factor * geom_scale^2,  # I ∝ m·R²: P^1.35 × P = P^2.35
+        base.c_pto             * power_ratio^2,               # c = P/ω², ω ∝ P^(-1/2) → c ∝ P²
     )
 end

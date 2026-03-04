@@ -45,8 +45,8 @@ end
     p50 = params_50kw()
     p10 = params_10kw()
 
-    # Radius scales geometrically: R ∝ (P_ratio)^(1/3)
-    scale_factor = (50.0 / 10.0)^(1/3)
+    # Radius scales aerodynamically: R ∝ (P_ratio)^(1/2) since P_aero ∝ R²
+    scale_factor = (50.0 / 10.0)^(1/2)
     @test p50.rotor_radius ≈ p10.rotor_radius * scale_factor atol=0.1
     @test p50.tether_length ≈ p10.tether_length * scale_factor atol=1.0
 
@@ -68,8 +68,8 @@ end
     expected_factor = (20.0 / 10.0)^1.35
     @test p20.m_blade ≈ p10.m_blade * expected_factor atol=0.01
 
-    # Radius scales geometrically
-    r_factor = (20.0 / 10.0)^(1/3)
+    # Radius scales aerodynamically: R ∝ P^(1/2)
+    r_factor = (20.0 / 10.0)^(1/2)
     @test p20.rotor_radius ≈ p10.rotor_radius * r_factor atol=0.01
 
     # Physics constants should not change
@@ -96,9 +96,9 @@ end
     avg_r = (p.trpt_hub_radius + r_bottom) / 2.0
     @test avg_r / p.trpt_rL_ratio ≈ p.tether_length / n_seg atol=0.01
 
-    # Mass scaling preserves rL_ratio, scales hub radius geometrically
+    # Mass scaling preserves rL_ratio, scales hub radius as R ∝ P^(1/2)
     p50 = params_50kw()
     @test p50.trpt_rL_ratio ≈ p.trpt_rL_ratio
-    scale = (50.0 / 10.0)^(1.0/3.0)
+    scale = (50.0 / 10.0)^(1.0/2.0)
     @test p50.trpt_hub_radius ≈ p.trpt_hub_radius * scale atol=0.01
 end
