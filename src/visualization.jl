@@ -61,12 +61,15 @@ Build the GLMakie Figure and Observables for TRPT animation.
     .alpha_tot  : Vector{Float64} — total twist (rad) at each time
     .omega      : Vector{Float64} — rotor speed (rad/s)
     .power_kw   : Vector{Float64} — ground power output (kW)
-    .v_hub      : Float64         — hub wind speed (m/s, constant for this run)
+    .v_hub      : Float64 or Vector{Float64} — hub wind speed (m/s).
+                  Scalar → treated as constant throughout the run.
+                  Vector → one value per frame; displayed live in the HUD.
 
 Returns `(fig, time_obs)` where `time_obs::Observable{Int}` is the frame index.
 """
 function build_trpt_scene(p::SystemParams, traj)
-    n_frames = length(traj.t)
+    n_frames  = length(traj.t)
+    v_hub_vec = isa(traj.v_hub, AbstractVector) ? traj.v_hub : fill(traj.v_hub, n_frames)
 
     fig = Figure(size=(1400, 800))
 
@@ -85,7 +88,7 @@ function build_trpt_scene(p::SystemParams, traj)
     omega_label  = Label(hud[4, 1], "ω = 0.00 rad/s";    halign=:left)
     twist_label  = Label(hud[5, 1], "α_seg = 0.00°";     halign=:left)
     margin_label = Label(hud[6, 1], "Collapse margin: 100%"; halign=:left)
-    wind_label   = Label(hud[7, 1], "V_hub = $(round(traj.v_hub, digits=2)) m/s"; halign=:left)
+    wind_label   = Label(hud[7, 1], "V_hub = $(round(v_hub_vec[1], digits=2)) m/s"; halign=:left)
     Label(hud[8, 1], ""; halign=:left)   # spacer
 
     # Time slider
@@ -146,6 +149,7 @@ function build_trpt_scene(p::SystemParams, traj)
         omega_label.text[]  = "ω = $(round(omega,  digits=3)) rad/s"
         twist_label.text[]  = "α_seg = $(round(alpha_s, digits=1))°"
         margin_label.text[] = "Collapse margin: $(round(margin, digits=1))%"
+        wind_label.text[]   = "V_hub = $(round(v_hub_vec[frame_idx], digits=2)) m/s"
     end
 
     # ── Play button toggles animation ─────────────────────────────────────────

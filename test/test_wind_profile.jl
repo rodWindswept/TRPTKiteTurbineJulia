@@ -41,4 +41,61 @@ include("../src/wind_profile.jl")
 
     end
 
+    @testset "steady_wind" begin
+        f = steady_wind(8.5)
+        @test f(0.0)   ≈ 8.5
+        @test f(60.0)  ≈ 8.5
+        @test f(120.0) ≈ 8.5
+    end
+
+    @testset "wind_ramp" begin
+        f = wind_ramp(6.0, 14.0, 30.0, 90.0)
+        # Before ramp
+        @test f(0.0)  ≈ 6.0
+        @test f(30.0) ≈ 6.0
+        # After ramp
+        @test f(90.0)  ≈ 14.0
+        @test f(120.0) ≈ 14.0
+        # Midpoint (linear)
+        @test f(60.0) ≈ 10.0  atol=1e-10
+        # Monotonically increasing through ramp
+        vs = [f(t) for t in 30.0:10.0:90.0]
+        @test issorted(vs)
+    end
+
+    @testset "gust_event" begin
+        f = gust_event(8.0, 15.0, 40.0, 60.0)
+        # Outside gust window
+        @test f(0.0)  ≈ 8.0
+        @test f(39.9) ≈ 8.0
+        @test f(60.1) ≈ 8.0
+        # Peak at midpoint
+        v_peak = f(50.0)
+        @test v_peak ≈ 15.0  atol=0.01
+        # C¹ continuity at edges (derivative near 0 at t_start and t_end)
+        @test f(40.0) ≈ 8.0  atol=1e-6
+        @test f(60.0) ≈ 8.0  atol=1e-6
+        # All values within [v_base, v_gust]
+        @test all(8.0 .<= f(t) .<= 15.0 for t in 40.0:0.1:60.0)
+    end
+
+    @testset "turbulent_wind" begin
+        v_mean = 10.0
+        TI     = 0.15
+        f      = turbulent_wind(v_mean, TI, 120.0; rng_seed=42)
+        ts     = 0.0:1.0:120.0
+        vs     = [f(t) for t in ts]
+        # Mean within 15 % of v_mean over 120 s
+        @test abs(sum(vs) / length(vs) - v_mean) < 0.15 * v_mean
+        # All values positive (clamped to ≥ 0.5)
+        @test all(v > 0.0 for v in vs)
+        # Standard deviation within [50 %, 200 %] of expected σ
+        σ_expected = TI * v_mean
+        σ_actual   = sqrt(sum((v - v_mean)^2 for v in vs) / length(vs))
+        @test 0.5 * σ_expected < σ_actual < 2.0 * σ_expected
+        # Deterministic: same seed → same result
+        f2 = turbulent_wind(v_mean, TI, 120.0; rng_seed=42)
+        @test f2(50.0) ≈ f(50.0)  atol=1e-10
+    end
+
 end

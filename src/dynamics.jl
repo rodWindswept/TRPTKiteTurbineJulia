@@ -104,6 +104,68 @@ function trpt_ode!(du, u, p::SystemParams, t)
 end
 
 """
+    trpt_ode_wind!(du, u, pw, t)
+
+Variable-wind variant of `trpt_ode!`. Accepts `pw = (p::SystemParams, wind_fn)`
+where `wind_fn(t::Float64) -> Float64` returns the reference wind speed at time
+`t` (m/s at altitude `p.h_ref`). Physics are identical to `trpt_ode!`.
+
+Use with `ODEProblem(trpt_ode_wind!, u0, tspan, (p, wind_fn))`.
+"""
+function trpt_ode_wind!(du, u, pw, t)
+    p, wind_fn = pw
+
+    # Step 1 — Wind speed at hub altitude (time-varying)
+    h       = hub_altitude(p.tether_length, p.elevation_angle)
+    v_ref_t = wind_fn(t)
+    v_hub   = wind_at_altitude(v_ref_t, p.h_ref, h)
+
+    # Steps 2–9 identical to trpt_ode! ─────────────────────────────────────────
+    n_segments_inertia = p.n_rings + 1
+    r_top_inertia  = p.trpt_hub_radius
+    r_bot_inertia  = 2.0 * p.tether_length * p.trpt_rL_ratio / n_segments_inertia - r_top_inertia
+    I_rings = sum(p.m_ring * (r_bot_inertia + i / p.n_rings * (r_top_inertia - r_bot_inertia))^2
+                  for i in 1:p.n_rings)
+    I_total = p.n_blades * p.m_blade * p.rotor_radius^2 + I_rings + p.i_pto
+
+    n_segments = p.n_rings + 1
+    r_top      = p.trpt_hub_radius
+    r_bottom   = 2.0 * p.tether_length * p.trpt_rL_ratio / n_segments - r_top
+
+    spring_coeff = p.e_modulus * π * (p.tether_diameter / 2)^2 * p.n_lines * p.trpt_rL_ratio
+    sum_inv_k    = sum(1.0 / (spring_coeff * (r_bottom + i / (n_segments - 1) * (r_top - r_bottom)))
+                       for i in 0:n_segments-1)
+    k_eff = 1.0 / sum_inv_k
+
+    α_avg         = u[1] / n_segments
+    τ_transmitted = k_eff * sin(α_avg)
+
+    k_bottom = spring_coeff * r_bottom
+    α_bottom = abs(u[1]) * k_eff / k_bottom
+    if abs(α_avg) >= 0.95 * π || α_bottom >= 0.95 * π
+        τ_transmitted = 0.0
+    end
+
+    ω      = u[2]
+    ω_safe = max(abs(ω), 0.1)
+    P_aero = 0.5 * p.rho * v_hub^3 * π * p.rotor_radius^2 *
+             p.cp * cos(p.elevation_angle)^3
+    τ_aero = sign(ω) * P_aero / ω_safe
+
+    λ_t        = ω * p.rotor_radius / max(v_hub, 0.1)
+    V_a        = v_hub * (λ_t + sin(p.elevation_angle))
+    drag_force = 0.25 * 1.0 * p.tether_diameter * p.tether_length * p.rho * V_a^2
+    τ_drag     = drag_force * p.rotor_radius * 0.5
+
+    ω_ground = τ_transmitted / p.c_pto
+
+    du[1] = ω - ω_ground
+    du[2] = (τ_aero - τ_drag - τ_transmitted) / I_total
+
+    return nothing
+end
+
+"""
     instantaneous_power(p::SystemParams, u::Vector{Float64}) -> Float64
 
 Return the electrical power extracted by the PTO (W) at ODE state `u`.
