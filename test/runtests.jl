@@ -6,4 +6,5 @@ using Test
     include("test_wind_profile.jl")
     include("test_dynamics.jl")
     include("test_geometry.jl")
+    include("test_force_analysis.jl")
 end
