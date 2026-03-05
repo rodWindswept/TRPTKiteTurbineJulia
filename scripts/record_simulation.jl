@@ -11,6 +11,8 @@ ENV["FFMPEG"] = FFMPEG_jll.ffmpeg_path
 include("../src/parameters.jl")
 include("../src/wind_profile.jl")
 include("../src/dynamics.jl")
+include("../src/geometry.jl")
+include("../src/force_analysis.jl")
 include("../src/visualization.jl")
 
 mkpath("output")
