@@ -11,10 +11,13 @@ include("../src/geometry.jl")
     nodes = compute_trpt_geometry(p, alpha_tot)
 
     @test size(nodes) == (p.n_rings + 2, p.n_lines, 3)
-    @test all(nodes[1, :, 3] .≈ 0.0)
+    # Ground ring centre is at origin — centroid z of the ring ≈ 0
+    # (individual nodes are not at z=0 because rings are perpendicular to inclined shaft)
+    @test sum(nodes[1, :, 3]) / p.n_lines ≈ 0.0 atol=1e-6
 
     h_hub = p.tether_length * sin(p.elevation_angle)
-    @test nodes[end, 1, 3] ≈ h_hub atol=1e-6
+    # Top ring centre z ≈ h_hub — centroid z of the ring
+    @test sum(nodes[end, :, 3]) / p.n_lines ≈ h_hub atol=1e-6
 
     x_hub = p.tether_length * cos(p.elevation_angle)
     @test nodes[end, 1, 1] ≈ x_hub atol=p.trpt_hub_radius

@@ -3,9 +3,8 @@
 # Coordinate system: +x downwind, +y crosswind-right, +z vertical up.
 # TRPT ground anchor at world origin (0,0,0).
 #
-# Ring planes are horizontal (parallel to the XY ground plane).
+# Ring planes are PERPENDICULAR to the shaft axis (orthogonal to shaft_dir).
 # Ring centres are spaced along the inclined shaft axis.
-# This correctly represents physical tether attachment rings.
 
 using LinearAlgebra
 
@@ -42,6 +41,11 @@ function compute_trpt_geometry(p::SystemParams, alpha_tot::Float64,
 
     r_bottom = 2.0 * p.tether_length * p.trpt_rL_ratio / n_seg - p.trpt_hub_radius
 
+    # Perpendicular basis in the plane orthogonal to shaft_dir
+    ref   = abs(shaft_dir[3]) < 0.99 ? [0.0, 0.0, 1.0] : [0.0, 1.0, 0.0]
+    perp1 = normalize(cross(shaft_dir, ref))
+    perp2 = cross(shaft_dir, perp1)
+
     nodes = zeros(Float64, n_levels, p.n_lines, 3)
 
     for i in 1:n_levels
@@ -51,10 +55,9 @@ function compute_trpt_geometry(p::SystemParams, alpha_tot::Float64,
         theta_i     = level_idx * alpha_seg
 
         for j in 1:p.n_lines
-            phi  = theta_i + (j - 1) * (2π / p.n_lines)
-            nodes[i, j, 1] = ring_centre[1] + r_i * cos(phi)
-            nodes[i, j, 2] = ring_centre[2] + r_i * sin(phi)
-            nodes[i, j, 3] = ring_centre[3]
+            phi        = theta_i + (j - 1) * (2π / p.n_lines)
+            node       = ring_centre .+ r_i .* (cos(phi) .* perp1 .+ sin(phi) .* perp2)
+            nodes[i, j, :] = node
         end
     end
 
@@ -84,14 +87,19 @@ function compute_blade_geometry(p::SystemParams, alpha_tot::Float64,
     l_seg        = p.tether_length / n_seg
     rotor_centre = (p.n_rings + 1) * l_seg .* shaft_dir
 
+    # Perpendicular basis in the rotor plane (orthogonal to shaft_dir)
+    ref   = abs(shaft_dir[3]) < 0.99 ? [0.0, 0.0, 1.0] : [0.0, 1.0, 0.0]
+    perp1 = normalize(cross(shaft_dir, ref))
+    perp2 = cross(shaft_dir, perp1)
+
     blades = zeros(Float64, p.n_blades, 4, 3)
 
     for b in 1:p.n_blades
         phi_b = alpha_tot + (b - 1) * (2π / p.n_blades)
-        # blade radial direction (in horizontal plane)
-        blade_dir = [cos(phi_b), sin(phi_b), 0.0]
-        # chord direction perpendicular to blade and vertical
-        chord_dir = [0.0, 0.0, 1.0]
+        # blade radial direction — in the plane perpendicular to shaft
+        blade_dir = cos(phi_b) .* perp1 .+ sin(phi_b) .* perp2
+        # chord direction — perpendicular to blade, within rotor plane
+        chord_dir = cross(shaft_dir, blade_dir)
 
         inner_centre = rotor_centre .+ blade_inner_r .* blade_dir
         outer_centre = rotor_centre .+ blade_outer_r .* blade_dir
