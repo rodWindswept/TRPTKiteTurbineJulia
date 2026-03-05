@@ -68,8 +68,8 @@ end
     # Structural check: I_total is the sum of its three components
     @test I_total ≈ p.n_blades * p.m_blade * p.rotor_radius^2 + I_rings + p.i_pto
 
-    # Blade contribution (3 × 11/3 kg × 5² m²) ≈ 275.0 kg·m²
-    @test p.n_blades * p.m_blade * p.rotor_radius^2 ≈ 275.0 atol=1.0
+    # Blade contribution (5 × 11/3 kg × 5² m²) ≈ 458.3 kg·m²
+    @test p.n_blades * p.m_blade * p.rotor_radius^2 ≈ 5 * (11.0/3.0) * 25.0 atol=1.0
 
     # Tapered ring inertia must be less than if all rings were at rotor_radius
     @test I_rings < p.n_rings * p.m_ring * p.rotor_radius^2

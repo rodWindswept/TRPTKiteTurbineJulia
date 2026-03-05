@@ -144,18 +144,18 @@ end
 # ── HUD builder ────────────────────────────────────────────────────────────────
 
 function _build_hud!(layout, p, traj_obs, time_obs, T_max_obs, C_max_obs)
-    Label(layout[1, 1], "Telemetry"; fontsize=16, font=:bold, halign=:left)
-    time_lbl   = Label(layout[2, 1], "t = 0.00 s";           halign=:left)
-    power_lbl  = Label(layout[3, 1], "P = 0.00 kW";          halign=:left)
-    omega_lbl  = Label(layout[4, 1], "ω = 0.00 rad/s";       halign=:left)
-    twist_lbl  = Label(layout[5, 1], "α_seg = 0.00°";        halign=:left)
-    margin_lbl = Label(layout[6, 1], "Collapse margin: 100%"; halign=:left)
-    wind_lbl   = Label(layout[7, 1], "V_hub = 0.00 m/s";     halign=:left)
+    Label(layout[1, 1], "Live Telemetry"; fontsize=16, font=:bold, halign=:left)
+    time_lbl   = Label(layout[2, 1], "Time  t = 0.00 s";                    halign=:left)
+    power_lbl  = Label(layout[3, 1], "Output power  P = 0.00 kW";           halign=:left)
+    omega_lbl  = Label(layout[4, 1], "Rotor speed  ω = 0.00 rad/s (0 rpm)"; halign=:left)
+    twist_lbl  = Label(layout[5, 1], "Shaft twist / section  α = 0.00°";    halign=:left)
+    margin_lbl = Label(layout[6, 1], "Collapse margin: 100%";               halign=:left)
+    wind_lbl   = Label(layout[7, 1], "Wind at hub  V = 0.00 m/s";           halign=:left)
     Label(layout[8, 1], ""; halign=:left)
 
-    Label(layout[9,  1], "Tether tension (N)";   fontsize=12, font=:bold, halign=:left)
+    Label(layout[9,  1], "Tether pull (axial tension, N)";    fontsize=12, font=:bold, halign=:left)
     t_bar_lbl = Label(layout[10, 1], "0 → — N  |  FoS: —"; halign=:left)
-    Label(layout[11, 1], "Ring compression (N)"; fontsize=12, font=:bold, halign=:left)
+    Label(layout[11, 1], "Ring squeeze (hoop compression, N)"; fontsize=12, font=:bold, halign=:left)
     c_bar_lbl = Label(layout[12, 1], "0 → — N  |  FoS: —"; halign=:left)
 
     n_seg = p.n_rings + 1
@@ -171,12 +171,13 @@ function _build_hud!(layout, p, traj_obs, time_obs, T_max_obs, C_max_obs)
         alpha_s = rad2deg(alpha / n_seg)
         margin  = max(0.0, (1.0 - abs(alpha / n_seg) / π) * 100.0)
 
-        time_lbl.text[]   = "t = $(round(t,      digits=2)) s"
-        power_lbl.text[]  = "P = $(round(power,  digits=2)) kW"
-        omega_lbl.text[]  = "ω = $(round(omega,  digits=3)) rad/s"
-        twist_lbl.text[]  = "α_seg = $(round(alpha_s, digits=1))°"
+        rpm = omega * 60.0 / (2π)
+        time_lbl.text[]   = "Time  t = $(round(t,      digits=2)) s"
+        power_lbl.text[]  = "Output power  P = $(round(power,  digits=2)) kW"
+        omega_lbl.text[]  = "Rotor speed  ω = $(round(omega, digits=3)) rad/s  ($(round(rpm, digits=1)) rpm)"
+        twist_lbl.text[]  = "Shaft twist / section  α = $(round(alpha_s, digits=1))°"
         margin_lbl.text[] = "Collapse margin: $(round(margin, digits=1))%"
-        wind_lbl.text[]   = "V_hub = $(round(v_hub, digits=2)) m/s"
+        wind_lbl.text[]   = "Wind at hub  V = $(round(v_hub, digits=2)) m/s"
 
         T_max = T_max_obs[]
         C_max = C_max_obs[]
@@ -192,11 +193,11 @@ end
 function _build_controls!(layout, p, traj_obs, T_max_obs, C_max_obs, n_frames)
     Label(layout[1, 1], "Controls"; fontsize=14, font=:bold, halign=:left)
 
-    Label(layout[2, 1], "Elevation β (°)"; halign=:left)
+    Label(layout[2, 1], "Shaft tilt above horizon  β (°)"; halign=:left)
     elev_slider = Slider(layout[3, 1]; range=0.0:1.0:75.0,
                          startvalue=rad2deg(p.elevation_angle))
 
-    Label(layout[4, 1], "Wind azimuth φ (°)"; halign=:left)
+    Label(layout[4, 1], "Wind direction  φ (°)"; halign=:left)
     azimuth_slider = Slider(layout[5, 1]; range=0.0:1.0:360.0, startvalue=0.0)
 
     shaft_dir_obs = Observable([cos(p.elevation_angle), 0.0, sin(p.elevation_angle)])
@@ -235,11 +236,11 @@ function _build_controls!(layout, p, traj_obs, T_max_obs, C_max_obs, n_frames)
     end
 
     # Dynamic torque panel
-    Label(layout[9, 1], "Dynamic Torque Mode"; fontsize=13, font=:bold, halign=:left)
+    Label(layout[9, 1], "Power Take-Off Tuning"; fontsize=13, font=:bold, halign=:left)
     enable_toggle = Toggle(layout[10, 1])
     Label(layout[10, 2], "Enable"; halign=:left)
 
-    Label(layout[11, 1], "c_pto (N·m·s/rad)"; halign=:left)
+    Label(layout[11, 1], "Generator braking  c_pto (N·m·s/rad)"; halign=:left)
     c_pto_slider = Slider(layout[12, 1];
                           range=exp10.(range(log10(100.0), log10(50000.0), length=200)),
                           startvalue=p.c_pto)

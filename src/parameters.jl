@@ -111,7 +111,7 @@ function params_10kw()::SystemParams
         100e9,           # e_modulus (Pa) — Dyneema ~100 GPa
         14,              # n_rings — DRR §5.2: rings every 2 m → (30/2)−1 = 14
         m_ring,          # m_ring (kg)
-        3,               # n_blades — Framework PDF §5.3
+        5,               # n_blades — one blade per tether line / polygon vertex (n_lines = 5)
         m_blade,         # m_blade (kg)
         0.22,            # cp — AeroDyn BEM (Rotor_TRTP_Sizing_Iteration2.xlsx); replaces 0.15 proxy
         i_pto,           # i_pto (kg·m²)

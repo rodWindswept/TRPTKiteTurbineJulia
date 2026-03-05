@@ -8,7 +8,7 @@ include("../src/parameters.jl")
     # Geometry — Framework PDF §5.3
     @test p.rotor_radius ≈ 5.0
     @test p.elevation_angle ≈ π/6 atol=1e-6
-    @test p.n_blades == 3
+    @test p.n_blades == 5   # one blade per tether line / polygon vertex
 
     # TRPT geometry — Design Reasoning Report §5.2
     @test p.tether_length ≈ 30.0        # "For a 30m TRPT"
@@ -28,9 +28,9 @@ include("../src/parameters.jl")
     shaft_mass  = p.n_rings * p.m_ring + tether_mass
     @test shaft_mass ≈ 6.6 atol=0.5
 
-    # Mass values — Mass Scaling PDF §"Static Lift Kite Mass Bottleneck"
+    # Mass values — 5 blades at 11/3 kg each (DRR blade design mass, 5 blades from n_lines=5)
     total_rotor_mass = p.n_blades * p.m_blade
-    @test total_rotor_mass ≈ 11.0 atol=0.1
+    @test total_rotor_mass ≈ 5 * (11.0 / 3.0) atol=0.1
 
     # Ground station inertia — Mass Scaling PDF §"Drivetrain Mass and Inertia Matching"
     @test p.i_pto ≈ 0.059 atol=0.001
@@ -50,9 +50,9 @@ end
     @test p50.rotor_radius ≈ p10.rotor_radius * scale_factor atol=0.1
     @test p50.tether_length ≈ p10.tether_length * scale_factor atol=1.0
 
-    # Total rotor mass scales at 1.35 exponent
+    # Total rotor mass scales at 1.35 exponent (base = 5 blades × 11/3 kg each)
     mass_ratio = (50.0 / 10.0)^1.35
-    expected_rotor = 11.0 * mass_ratio
+    expected_rotor = (5 * 11.0 / 3.0) * mass_ratio
     @test p50.n_blades * p50.m_blade ≈ expected_rotor atol=1.0
 
     # 50 kW system must be larger than 10 kW
