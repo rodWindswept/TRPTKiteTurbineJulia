@@ -23,8 +23,14 @@ end
 
 Derive per-element structural forces from ODE state `u = [alpha_tot, omega]`.
 
-Tether tension per segment i:
-  T_i = torsional + centrifugal + gravitational components
+Tether tension per segment i has four contributions:
+  1. Lifter kite pre-tension: vertical component of the lifter line compensates full
+     airborne weight. T_lifter = m_airborne × g / (sin(lifter_elevation) × n_lines).
+     Same for every segment (top-applied, propagates down all tethers).
+  2. Aerodynamic rotor thrust: F_thrust = P_aero / v_eff, distributed to n_lines.
+     Same for every segment (top-applied, propagates down all tethers).
+  3. Centrifugal: varies per segment — tether mass × ω² × r_i / n_lines.
+  4. Gravitational: weight of all mass above this segment along shaft axis / n_lines.
 
 Ring hoop compression from polygon geometry:
   C_i = T_i × r_i / (2 × sin(π / n_lines))
@@ -44,47 +50,57 @@ function element_forces(p::SystemParams, u::Vector{Float64}, v_hub::Float64)::Fo
     tether_line_mass_per_m = p.rho * π * (p.tether_diameter / 2)^2
     m_seg_tether = tether_line_mass_per_m * l_seg * p.n_lines
 
-    alpha_per_seg = alpha_tot / n_seg
-
     tether_tension   = zeros(Float64, n_seg)
     ring_compression = zeros(Float64, p.n_rings)
 
+    # τ_transmitted
     sum_inv_k = sum(1.0 / (spring_coeff * (r_bottom + i / (n_seg - 1) * (r_top - r_bottom)))
                     for i in 0:n_seg-1)
     k_eff = 1.0 / sum_inv_k
     tau_transmitted = k_eff * sin(alpha_tot / n_seg)
 
+    # Aerodynamic torque
     omega_safe = max(abs(omega), 0.1)
     P_aero     = 0.5 * p.rho * v_hub^3 * π * p.rotor_radius^2 * p.cp * cos(p.elevation_angle)^3
     tau_aero   = sign(omega) * P_aero / omega_safe
 
+    # Tether drag torque
     lambda_t   = omega * p.rotor_radius / max(v_hub, 0.1)
     V_a        = v_hub * (lambda_t + sin(p.elevation_angle))
     drag_force = 0.25 * 1.0 * p.tether_diameter * p.tether_length * p.rho * V_a^2
     tau_drag   = drag_force * p.rotor_radius * 0.5
 
+    # ── Top-applied axial loads (same for every segment) ──────────────────────
+
+    # 1. Lifter kite pre-tension: vertical component compensates full airborne weight.
+    #    Lifting line at p.lifter_elevation above horizontal; force distributed to n_lines nodes.
+    m_airborne    = p.n_blades * p.m_blade + p.n_rings * p.m_ring
+    T_lift_total  = m_airborne * g / sin(p.lifter_elevation)
+    T_lifter      = T_lift_total / p.n_lines
+
+    # 2. Aerodynamic rotor thrust: applied at rotor end, propagates to all segments.
+    #    F_thrust = P_aero / v_effective where v_effective = v_hub * cos(β).
+    v_eff    = max(v_hub * cos(p.elevation_angle), 0.1)
+    F_thrust = P_aero / v_eff
+    T_aero   = F_thrust / p.n_lines
+
+    # ── Per-segment loads (vary with position) ────────────────────────────────
+
     for i in 0:n_seg-1
         r_i = r_bottom + i / (n_seg - 1) * (r_top - r_bottom)
 
-        # Per-line tether tension: axial structural loads only (N per tether line).
-        # Torsional shear is carried by the twisted helix geometry and tracked separately
-        # via tau_transmitted; it does not contribute to axial (pull-out) tether tension
-        # in the same way as gravity and centrifugal loads.
-
-        # Centrifugal: total centrifugal force of this segment's tether mass divided by n_lines
+        # Centrifugal load on this segment's tether mass
         F_centrifugal = m_seg_tether * omega^2 * r_i / p.n_lines
 
-        # Gravitational: weight of all mass above this segment projected along shaft axis,
-        # divided equally among n_lines
-        n_above        = n_seg - 1 - i
-        m_rings_above  = n_above * p.m_ring
+        # Gravitational: weight of all mass above this segment along shaft axis
+        n_above       = n_seg - 1 - i
+        m_rings_above = n_above * p.m_ring
         m_blades_above = (i == n_seg - 1) ? p.n_blades * p.m_blade : 0.0
         m_tether_above = n_above * m_seg_tether
         m_above        = m_rings_above + m_blades_above + m_tether_above
         F_gravity      = m_above * g * sin(p.elevation_angle) / p.n_lines
 
-        # Per-line tether tension from axial loads (N)
-        tether_tension[i + 1] = max(0.0, F_centrifugal + F_gravity)
+        tether_tension[i + 1] = max(0.0, T_lifter + T_aero + F_centrifugal + F_gravity)
 
         if i < p.n_rings
             ring_compression[i + 1] = tether_tension[i + 1] * r_i /

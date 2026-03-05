@@ -32,8 +32,22 @@ end
 
     @test all(fs.tether_tension   .>= 0.0)
     @test all(fs.ring_compression .>= 0.0)
-    @test all(fs.tether_tension   .< 3500.0)
+    @test all(fs.tether_tension   .< 3500.0)   # well under Dyneema 3mm SWL
+    # At rated: T ≈ 227 N/line → C ≈ 227 × r_top / (2 × sin(π/5)) ≈ 384 N < 500 N ✓
     @test all(fs.ring_compression .< 500.0)
+end
+
+@testset "ForceState — lifter pre-tension at zero wind" begin
+    p  = params_10kw()
+    u0 = [0.0, 0.0]
+    fs = element_forces(p, u0, 0.1)   # near-zero wind, no rotation
+
+    # Lifter kite provides pre-tension even at rest
+    m_airborne   = p.n_blades * p.m_blade + p.n_rings * p.m_ring
+    T_lift_total = m_airborne * 9.81 / sin(p.lifter_elevation)
+    T_expected   = T_lift_total / p.n_lines   # per line, roughly
+
+    @test all(fs.tether_tension .>= T_expected * 0.9)   # within 10% (gravity component varies)
 end
 
 @testset "ForceState — zero state" begin

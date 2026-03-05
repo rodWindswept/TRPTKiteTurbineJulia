@@ -21,6 +21,7 @@ struct SystemParams
 
     # TRPT geometry — Framework PDF §3
     elevation_angle::Float64  # TRPT shaft elevation angle β (rad)
+    lifter_elevation::Float64 # Lifter kite line elevation angle (rad); vertical component compensates airborne weight
     rotor_radius::Float64     # Airborne ring radius R (m)
     tether_length::Float64    # Unstretched total TRPT length L₀ (m)
 
@@ -99,6 +100,7 @@ function params_10kw()::SystemParams
         11.0,            # v_wind_ref (m/s) at hub — rated wind speed (DRR; AeroDyn sizing)
         15.0,            # h_ref (m) — hub altitude = 30 × sin(π/6)
         π / 6,           # elevation_angle = 30° (as physically built; DRR)
+        deg2rad(70.0),   # lifter_elevation = 70° (typical operating angle for launch/landing lifter kite line)
         5.0,             # rotor_radius R (m) — Framework PDF §5.3 (aerodynamic outer radius)
         30.0,            # tether_length L₀ (m) — DRR §5.2 "For a 30m TRPT"
         2.0,             # trpt_hub_radius (m) — ring radius at rotor end; DRR Grasshopper rL=0.74,
@@ -151,6 +153,7 @@ function mass_scale(base::SystemParams,
         base.v_wind_ref,
         base.h_ref             * geom_scale,
         base.elevation_angle,                  # angle does not scale
+        base.lifter_elevation,                 # angle does not scale
         base.rotor_radius      * geom_scale,
         base.tether_length     * geom_scale,
         base.trpt_hub_radius   * geom_scale,   # scales geometrically

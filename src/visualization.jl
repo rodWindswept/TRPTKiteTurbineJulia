@@ -114,6 +114,30 @@ function _build_3d_axes!(fig, position, p, traj_obs, shaft_dir_obs,
     # Ground anchor
     scatter!(ax3d, [0.0], [0.0], [0.0]; color=:green, markersize=20)
 
+    # Lifter kite force arrows — one per top-ring node, showing lifter line direction
+    # Arrow direction: same horizontal azimuth as shaft, at lifter_elevation above horizontal
+    m_airborne_vis = p.n_blades * p.m_blade + p.n_rings * p.m_ring
+    T_lift_vis     = m_airborne_vis * 9.81 / sin(p.lifter_elevation)
+    arrow_len      = 5.0   # fixed visual length (m) — not force-scaled, just directional indicator
+
+    for j in 1:p.n_lines
+        ax_obs = @lift begin
+            sd      = $shaft_dir_obs
+            nd      = $nodes_obs
+            # Horizontal direction of shaft (unit vector in ground plane)
+            sd_horiz_mag = sqrt(sd[1]^2 + sd[2]^2)
+            horiz = sd_horiz_mag > 1e-6 ? [sd[1]/sd_horiz_mag, sd[2]/sd_horiz_mag, 0.0] :
+                                           [1.0, 0.0, 0.0]
+            # Lifter line direction vector
+            lift_dir = horiz .* cos(p.lifter_elevation) .+ [0.0, 0.0, sin(p.lifter_elevation)]
+            node_pos = nd[end, j, :]
+            tip_pos  = node_pos .+ arrow_len .* lift_dir
+            ([node_pos[1], tip_pos[1]], [node_pos[2], tip_pos[2]], [node_pos[3], tip_pos[3]])
+        end
+        lines!(ax3d, @lift($ax_obs[1]), @lift($ax_obs[2]), @lift($ax_obs[3]);
+               color=:gold, linewidth=2.0)
+    end
+
     return ax3d
 end
 
@@ -230,6 +254,7 @@ function _build_controls!(layout, p, traj_obs, T_max_obs, C_max_obs, n_frames)
 
         c_new = c_pto_slider.value[]
         p_new = SystemParams(p.rho, p.v_wind_ref, p.h_ref, p.elevation_angle,
+                             p.lifter_elevation,
                              p.rotor_radius, p.tether_length, p.trpt_hub_radius,
                              p.trpt_rL_ratio, p.n_lines, p.tether_diameter,
                              p.e_modulus, p.n_rings, p.m_ring, p.n_blades,
