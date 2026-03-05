@@ -15,6 +15,8 @@ using Statistics
 include("parameters.jl")
 include("wind_profile.jl")
 include("dynamics.jl")
+include("geometry.jl")
+include("force_analysis.jl")
 include("visualization.jl")
 
 const RATED_KW       = length(ARGS) > 0 ? parse(Float64, ARGS[1]) : 10.0
@@ -80,6 +82,12 @@ function main()
         v_hub     = v_hub,
     )
 
+    # ── Force scan over full trajectory ───────────────────────────────────────
+    u_frames  = [[sol[1, i], sol[2, i]] for i in eachindex(sol.t)]
+    v_hub_all = fill(v_hub, length(sol.t))
+    T_max_run, C_max_run = run_force_scan(p, u_frames, v_hub_all)
+    force_states = [element_forces(p, u_frames[i], v_hub_all[i]) for i in eachindex(sol.t)]
+
     # ── CSV export ────────────────────────────────────────────────────────────
     df = DataFrame(
         time_s            = traj.t,
@@ -89,7 +97,19 @@ function main()
         hub_wind_speed_ms = fill(v_hub, length(traj.t)),
         power_kw          = traj.power_kw,
         altitude_m        = fill(h_hub, length(traj.t)),
+        tau_aero          = [fs.tau_aero        for fs in force_states],
+        tau_drag          = [fs.tau_drag        for fs in force_states],
+        tau_transmitted   = [fs.tau_transmitted for fs in force_states],
+        T_max_run         = fill(T_max_run, length(sol.t)),
+        C_max_run         = fill(C_max_run, length(sol.t)),
     )
+
+    for seg in 1:n_seg
+        df[!, Symbol("T_seg_$(seg)")] = [fs.tether_tension[seg] for fs in force_states]
+    end
+    for ring in 1:p.n_rings
+        df[!, Symbol("C_ring_$(ring)")] = [fs.ring_compression[ring] for fs in force_states]
+    end
 
     csv_path = "output/telemetry_summary.csv"
     CSV.write(csv_path, df)
