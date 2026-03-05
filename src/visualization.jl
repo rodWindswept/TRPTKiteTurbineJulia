@@ -324,9 +324,9 @@ function build_trpt_scene(p::SystemParams, traj)
     C_max_obs = Observable(C_max_run)
 
     fig = Figure(size=(1600, 900))
-    colsize!(fig.layout, 2, Fixed(340))
 
     right = GridLayout(fig[1, 2])
+    colsize!(fig.layout, 2, Fixed(340))
     hud_l = GridLayout(right[1, 1])
     ctl_l = GridLayout(right[2, 1])
 
