@@ -11,6 +11,7 @@ GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 KiteModels = "b94af626-7959-4878-9336-2adc27959007"
 KiteUtils = "90980105-b163-44e5-ba9f-8b1c83bb0533"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+XLSX = "fdbf4ff8-1666-58a4-91e7-1b58723a45e0"
 
 [compat]
 CSV = "0.10.16"
@@ -21,3 +22,4 @@ GLMakie = "0.13.8"
 KiteModels = "0.11.2"
 KiteUtils = "0.11.2"
 Statistics = "1.11.1"
+XLSX = "0.10.4"

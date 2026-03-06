@@ -2,6 +2,7 @@ using Test
 
 include("../src/parameters.jl")
 include("../src/wind_profile.jl")
+include("../src/aerodynamics.jl")
 include("../src/dynamics.jl")
 include("../src/force_analysis.jl")
 

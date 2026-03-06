@@ -76,11 +76,12 @@ function trpt_ode!(du, u, p::SystemParams, t)
         τ_transmitted = 0.0
     end
 
-    # Step 6 — Aerodynamic torque
+    # Step 6 — Aerodynamic torque (TSR-dependent Cp from BEM table)
     ω      = u[2]
     ω_safe = max(abs(ω), 0.1)   # guard against ω→0; 0.1 rad/s ≈ 1 RPM
+    λ_t    = ω * p.rotor_radius / max(v_hub, 0.1)   # tip speed ratio
     P_aero = 0.5 * p.rho * v_hub^3 * π * p.rotor_radius^2 *
-             p.cp * cos(p.elevation_angle)^3
+             cp_at_tsr(λ_t) * cos(p.elevation_angle)^3
     # sign(ω) preserves direction: positive ω → accelerating torque,
     # negative ω (solver transient) → braking torque
     τ_aero = sign(ω) * P_aero / ω_safe
@@ -88,7 +89,6 @@ function trpt_ode!(du, u, p::SystemParams, t)
     # Step 7 — Tether drag (Tulloch model)
     # V_a = v_hub × (λ_t + sin(β)): sin(β) is the wind component perpendicular to the
     # inclined tether axis (drag-relevant direction); per Framework PDF §3 / design doc §3.3
-    λ_t       = ω * p.rotor_radius / max(v_hub, 0.1)   # tether speed ratio
     V_a       = v_hub * (λ_t + sin(p.elevation_angle))  # apparent velocity (m/s)
     drag_force = 0.25 * 1.0 * p.tether_diameter * p.tether_length * p.rho * V_a^2
     τ_drag    = drag_force * p.rotor_radius * 0.5
@@ -148,11 +148,11 @@ function trpt_ode_wind!(du, u, pw, t)
 
     ω      = u[2]
     ω_safe = max(abs(ω), 0.1)
+    λ_t    = ω * p.rotor_radius / max(v_hub, 0.1)
     P_aero = 0.5 * p.rho * v_hub^3 * π * p.rotor_radius^2 *
-             p.cp * cos(p.elevation_angle)^3
+             cp_at_tsr(λ_t) * cos(p.elevation_angle)^3
     τ_aero = sign(ω) * P_aero / ω_safe
 
-    λ_t        = ω * p.rotor_radius / max(v_hub, 0.1)
     V_a        = v_hub * (λ_t + sin(p.elevation_angle))
     drag_force = 0.25 * 1.0 * p.tether_diameter * p.tether_length * p.rho * V_a^2
     τ_drag     = drag_force * p.rotor_radius * 0.5

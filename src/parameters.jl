@@ -113,9 +113,12 @@ function params_10kw()::SystemParams
         m_ring,          # m_ring (kg)
         5,               # n_blades — one blade per tether line / polygon vertex (n_lines = 5)
         m_blade,         # m_blade (kg)
-        0.22,            # cp — AeroDyn BEM (Rotor_TRTP_Sizing_Iteration2.xlsx); replaces 0.15 proxy
+        0.22,            # cp — AeroDyn BEM (Rotor_TRTP_Sizing_Iteration2.xlsx); peak reference value
         i_pto,           # i_pto (kg·m²)
-        5000.0,          # c_pto (N·m·s/rad) — Framework PDF §5.3
+        100.0,           # c_pto (N·m·s/rad) — tuned for optimal TSR λ≈4.1 at rated wind (11 m/s)
+                         #   Derivation: ω_opt = 4.1×11/5 = 9.02 rad/s; τ_net = P/ω − τ_drag ≈ 839 N·m
+                         #   c_pto = τ_net / ω_opt ≈ 93 → rounded to 100; formerly 5000 (Framework PDF §5.3,
+                         #   which did not account for TSR-dependent Cp — now corrected via BEM tables).
     )
 end
 

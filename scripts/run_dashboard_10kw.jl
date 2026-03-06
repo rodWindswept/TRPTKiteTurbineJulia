@@ -8,6 +8,7 @@ using DifferentialEquations, DataFrames, CSV, GLMakie, Statistics
 
 include("../src/parameters.jl")
 include("../src/wind_profile.jl")
+include("../src/aerodynamics.jl")
 include("../src/dynamics.jl")
 include("../src/geometry.jl")
 include("../src/force_analysis.jl")

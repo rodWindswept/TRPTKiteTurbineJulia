@@ -2,8 +2,9 @@
 # Per-element structural force analysis derived analytically from ODE state.
 # All forces in SI units (N, N·m).
 
-const TETHER_SWL = 3500.0   # Dyneema 3mm safe working load (N) — DRR §5.2
-const RING_SWL   = 500.0    # CFRP tube ring strut conservative buckling limit (N)
+const TETHER_SWL     = 3500.0   # Dyneema 3mm safe working load (N) — DRR §5.2
+const RING_SWL       = 500.0    # CFRP tube ring strut conservative buckling limit (N)
+const DYNEEMA_DENSITY = 970.0   # kg/m³ (Dyneema SK75/SK90 fibre density)
 
 """
     ForceState
@@ -47,7 +48,7 @@ function element_forces(p::SystemParams, u::Vector{Float64}, v_hub::Float64)::Fo
     omega     = u[2]
     g         = 9.81
 
-    tether_line_mass_per_m = p.rho * π * (p.tether_diameter / 2)^2
+    tether_line_mass_per_m = DYNEEMA_DENSITY * π * (p.tether_diameter / 2)^2
     m_seg_tether = tether_line_mass_per_m * l_seg * p.n_lines
 
     tether_tension   = zeros(Float64, n_seg)
@@ -59,13 +60,16 @@ function element_forces(p::SystemParams, u::Vector{Float64}, v_hub::Float64)::Fo
     k_eff = 1.0 / sum_inv_k
     tau_transmitted = k_eff * sin(alpha_tot / n_seg)
 
-    # Aerodynamic torque
+    # Tip speed ratio — used for both power and thrust coefficients
+    lambda_t   = omega * p.rotor_radius / max(v_hub, 0.1)
+
+    # Aerodynamic torque (TSR-dependent Cp from BEM table)
     omega_safe = max(abs(omega), 0.1)
-    P_aero     = 0.5 * p.rho * v_hub^3 * π * p.rotor_radius^2 * p.cp * cos(p.elevation_angle)^3
+    P_aero     = 0.5 * p.rho * v_hub^3 * π * p.rotor_radius^2 *
+                 cp_at_tsr(lambda_t) * cos(p.elevation_angle)^3
     tau_aero   = sign(omega) * P_aero / omega_safe
 
     # Tether drag torque
-    lambda_t   = omega * p.rotor_radius / max(v_hub, 0.1)
     V_a        = v_hub * (lambda_t + sin(p.elevation_angle))
     drag_force = 0.25 * 1.0 * p.tether_diameter * p.tether_length * p.rho * V_a^2
     tau_drag   = drag_force * p.rotor_radius * 0.5
@@ -78,10 +82,9 @@ function element_forces(p::SystemParams, u::Vector{Float64}, v_hub::Float64)::Fo
     T_lift_total  = m_airborne * g / sin(p.lifter_elevation)
     T_lifter      = T_lift_total / p.n_lines
 
-    # 2. Aerodynamic rotor thrust: applied at rotor end, propagates to all segments.
-    #    F_thrust = P_aero / v_effective where v_effective = v_hub * cos(β).
-    v_eff    = max(v_hub * cos(p.elevation_angle), 0.1)
-    F_thrust = P_aero / v_eff
+    # 2. Aerodynamic rotor thrust: CT(λ)-based formula; F = ½ρv²·A·CT(λ).
+    #    CT from BEM includes elevation geometry; propagates axially to all segments.
+    F_thrust = 0.5 * p.rho * v_hub^2 * π * p.rotor_radius^2 * ct_at_tsr(lambda_t)
     T_aero   = F_thrust / p.n_lines
 
     # ── Per-segment loads (vary with position) ────────────────────────────────

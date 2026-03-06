@@ -1,0 +1,71 @@
+todo
+1)make sure rotor power dynamics are realistic and related to wind speed and elevation as per prior research
+
+I'm skeptical about our tether tension calculation. If I drop the generator torque and the rotor speed goes up to 70rpm the line tension is virtually unchanged as compared to the default torque and ~7rpm. This seems very unlikely as a rotor at 70rpm will have significant lift from aparent wind alone
+
+Thought for 18s
+
+
+
+
+
+
+
+
+
+
+You're absolutely right to be skeptical — this is a genuine physics gap. Let me trace through the calculation to show exactly why:
+
+Analyzed
+
+force_analysis.jl#L62-110
+There it is — the problem is clear. Here's the breakdown:
+
+The bug: Aero thrust doesn't depend on ω
+Line 65:
+
+julia
+P_aero = 0.5 * p.rho * v_hub^3 * π * p.rotor_radius^2 * p.cp * cos(p.elevation_angle)^3
+This computes the same P_aero regardless of rotor speed. Then:
+
+julia
+F_thrust = P_aero / v_eff   # line 85 — also independent of ω
+T_aero   = F_thrust / p.n_lines
+So the aerodynamic contribution to tether tension doesn't change at all between 7 rpm and 70 rpm. The only ω-dependent term is centrifugal (line 94), but tether segment mass is tiny (~0.07 kg with Dyneema density), so m_seg × ω² × r_i adds negligibly even at 70 rpm.
+
+Why this is physically wrong
+In reality, a rotor at 70 rpm (tip speed ratio λ = ωR/v ≈ 3.3) vs 7 rpm (λ ≈ 0.33) experiences:
+
+Much higher blade apparent wind — the tangential velocity ωR dominates at high TSR, so total apparent wind ≈ √(v² + (ωR)²) is much larger
+Higher thrust coefficient CT(λ) — thrust increases with TSR (CT is typically 0.8–0.9 near optimal TSR, vs near-zero at very low TSR)
+The relationship P = T × v only holds for an ideal actuator disc — real rotors at high TSR have CT/CP ratios of 4–5×, meaning much more thrust than you'd infer from power alone
+The current model fundamentally lacks:
+
+A CT(λ) thrust curve — thrust as a function of tip speed ratio
+A Cp(λ) power curve — power coefficient as a function of TSR (currently constant at 0.22)
+Both of these are essential for realistic tension predictions. The 
+
+Rotor_TRTP_Sizing_Iteration2.xlsx
+ AeroDyn BEM data should contain exactly these curves.
+
+What the fix looks like
+The proper fix is two-fold:
+
+Power: Replace Cp = 0.22 (constant) with Cp(λ) — a lookup table or polynomial fit from the AeroDyn BEM data. At low λ (stall), Cp drops. At high λ (freewheeling), Cp drops. Peak near λ ≈ 4.1.
+
+Thrust: Replace F_thrust = P_aero / v_eff with:
+
+F_thrust = 0.5 × ρ × v_hub² × π × R² × CT(λ) × cos²(β)
+where CT(λ) is a separate curve from the BEM data. This makes thrust strongly ω-dependent.
+
+This is essentially your Priority 1 (power dynamics validation) — the force colouring is now technically correct in how it displays the data, but the underlying force data needs the Cp(λ) and CT(λ) curves to be meaningful.
+
+Want me to dig into 
+
+Rotor_TRTP_Sizing_Iteration2.xlsx
+ to extract the Cp(λ) and CT(λ) data? That would ground the fix in your actual AeroDyn BEM results rather than textbook approximations.
+
+
+
+
+

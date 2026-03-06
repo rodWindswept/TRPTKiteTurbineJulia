@@ -10,6 +10,7 @@ using DifferentialEquations, DataFrames, CSV, Statistics
 
 include("../src/parameters.jl")
 include("../src/wind_profile.jl")
+include("../src/aerodynamics.jl")
 include("../src/dynamics.jl")
 
 mkpath("output")

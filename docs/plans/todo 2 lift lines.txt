@@ -1,0 +1,5 @@
+todo 2 lift lines
+
+the current lift line arrangement has a flaw.
+All of the lines from the top rotor nodes effectively currently rise up from the nodes at the supposed angle of the lift kite ... This is not how the lines are arranged in real life, 
+IRL the lines from the nodes all extend to a common point where a bearing attaches them to the lifting line. The common node point bearing for all of the lines is ~10% further up the common axis of rotation. The tension force experienced by the bearing point is also upwards on the common axis. This means that the support vectors we currently show are incorrectly oriented, they should all point toward this common bearing. The total vertical lift force required to lift the turbine and TRPT is supported here at the bearing using the extended line which protrudes further upwards from the bearing approximately 1m until it meets the lift point where the kite force and an anchor force meet the lift point.
