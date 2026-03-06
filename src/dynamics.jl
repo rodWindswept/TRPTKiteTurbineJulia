@@ -2,7 +2,7 @@
 # TRPT ODE system for the Kite Turbine Simulator.
 #
 # Physics references:
-#   - Tulloch tether drag model: Tulloch & Yim (2008), AWEC proceedings
+#   - Tulloch tether drag model: Tulloch & Yue (2008), AWEC proceedings
 #   - TRPT stiffness formulation: "Rotary AWES Julia Simulation Framework.pdf" §3–§5
 #   - Segmented TRPT discretization: Framework PDF §3, Figure 3
 

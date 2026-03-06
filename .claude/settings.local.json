@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(julia:*)",
+      "Bash(git init:*)",
+      "Bash(git:*)",
+      "Bash(test:*)",
+      "Bash(/tmp/check_syntax.jl:*)",
+      "Bash(pipx list)",
+      "Bash(conda list)",
+      "Bash(/tmp/xlsx_env/bin/python3:*)",
+      "Bash(echo:*)",
+      "Bash(ffmpeg:*)",
+      "Bash(python3:*)"
+    ]
+  }
+}

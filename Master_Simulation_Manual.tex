@@ -1,0 +1,284 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{geometry}
+
+\geometry{margin=1in}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    filecolor=magenta,      
+    urlcolor=cyan,
+    pdftitle={Kite Turbine Simulation: Comprehensive Technical Manual},
+}
+
+\title{\textbf{Kite Turbine Simulation: Comprehensive Technical Manual}}
+\author{Windswept \& Interesting Ltd}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Conceptual Framework (Overall Introduction)}
+
+The Tensile Rotary Power Transmission (TRPT) Kite Turbine simulation is a specialized numerical framework designed to evaluate the dynamic and structural performance of airborne wind energy systems, with a specific focus on 10 kW to 50 kW commercial scales. At its core, the TRPT architecture replaces the massive steel towers and rigid turbine blades of conventional wind energy with a lightweight, tensegrity-like network of dyneema tethers and carbon-fiber rings, transmitting mechanical power directly to ground-based generators.
+
+This software resolves the complex Fluid-Structure Interaction (FSI) inherent in flexible kite networks. It couples a Differential-Algebraic aerodynamic solver with an aggregate structural dynamics model. The lifting elements (kites or rigid blades) extract energy from the high-altitude wind profile governed by the Hellmann power law. The extracted aerodynamic torque $\tau_{\text{aero}}$ drives the rotation of the entire tether network. Simultaneously, the system computes the structural consequences of this rotation: centrifugal stiffening, transient tether drag, and the precise mechanical transmission of torque ($\tau_{\text{transmitted}}$) down to the ground Power Take-Off (PTO).
+
+By solving the governing Ordinary Differential Equations (ODEs) of this coupled system, the simulation allows engineers to pinpoint catastrophic failure regimes—such as kinematic collapse when the network twists beyond operational limits—and optimize the generator braking strategies needed to maximize electrical power ($P_{\text{elec}}$) while maintaining safe working loads on the structural tethers.
+
+\section{Installation \& Quick-Start Guide}
+
+The Kite Turbine Simulation relies entirely on the Julia package manager for cross-platform dependency resolution, ensuring that all physical solvers and rendering backends (such as \texttt{FFMPEG\_jll} and \texttt{GLMakie}) are fetched identically across Windows, Linux, and macOS.
+
+\subsection{System Prerequisites}
+\begin{enumerate}
+    \item \textbf{Julia 1.12+}: Download the binaries for your specific operating system from \href{https://julialang.org/downloads/}{julialang.org}.
+    \item \textbf{Display Server}: Ensure an active display server (X11 or Wayland on Linux; native window managers on Windows/macOS) for the GLMakie 3D interactive dashboard.
+\end{enumerate}
+
+\subsection{The 20-Minute Simulation Launch (Step-by-Step)}
+\begin{enumerate}
+    \item \textbf{Repository Clone}: Open your OS terminal and fetch the source tree:
+\begin{verbatim}
+git clone https://github.com/rodWindswept/TRPTKiteTurbineJulia.git
+cd TRPTKiteTurbineJulia
+\end{verbatim}
+    \item \textbf{Environment Instantiation} (Estimated time: 5-10 minutes): Direct the Julia package manager to resolve and precompile exactly what is specified in \texttt{Project.toml}. You do not need to install system-level FFMPEG; Julia handles the binaries internally:
+\begin{verbatim}
+julia --project=. -e 'using Pkg; Pkg.instantiate()'
+\end{verbatim}
+    \item \textbf{Verification}: Confirm the fluid-dynamics and FSI structural load tests pass:
+\begin{verbatim}
+julia --project=. test/runtests.jl
+\end{verbatim}
+    \item \textbf{Launch the 50 kW Dashboard}: Initiate the primary interactive interface:
+\begin{verbatim}
+julia --project=. scripts/run_dashboard_50kw.jl
+\end{verbatim}
+    \textit{(Note: Press Enter in the terminal to cleanly terminate the GLMakie window once finished).}
+\end{enumerate}
+
+\section{Interface Catalog}
+
+\subsection{1. Shaft tilt above horizon ($\beta$) Slider}
+\begin{itemize}
+    \item \textbf{Definition:} A slider controlling the elevation angle of the TRPT system's main rotational axis relative to the ground plane.
+    \item \textbf{Mechanism:} Sets the variable $\beta$. This calculates the vertical hub altitude $h_{\text{hub}} = L_{\text{tether}} \sin(\beta)$. This altitude feeds into the wind shear profile to determine local wind velocity. Subsequently, it penalizes the available aerodynamic thrust via cosine losses: 
+    \begin{equation}
+        P_{\text{aero}} = \frac{1}{2} \rho V_{\text{hub}}^3 \pi R^2 C_p(\lambda) \cos^3(\beta)
+    \end{equation}
+    The geometric spatial shaft vector is updated as $\mathbf{v}_{\text{dir}} = [\cos(\varphi_w)\cos(\beta), \sin(\varphi_w)\cos(\beta), \sin(\beta)]$.
+    \item \textbf{Rationale:} Determines the lifting trajectory of the rotor into the boundary layer. Lower angles offer more direct wind intersection but reduce altitude and wind-shear velocity; higher angles reach faster wind but suffer severe cosine projection losses.
+    \item \textbf{Interaction:} The user drags the slider continuously between $0^\circ$ and $75^\circ$.
+    \item \textbf{Context:} Active during exploratory spatial geometry modifications and parameter setting prior to an ODE re-run.
+\end{itemize}
+
+\subsection{2. Wind direction ($\varphi_w$) Slider}
+\begin{itemize}
+    \item \textbf{Definition:} A slider adjusting the azimuthal direction of the incoming wind across the ground plane.
+    \item \textbf{Mechanism:} Sets $\varphi_w$, recalculating the geometric shaft direction vector $\mathbf{v}_{\text{dir}}$.
+    \item \textbf{Rationale:} Essential for visually evaluating the geometric response of the 3D tether network to crosswind environments and spatial clearance. It does not alter the 1D power equation but heavily dictates structural orientation.
+    \item \textbf{Interaction:} The user drags the slider continuously from $0^\circ$ to $360^\circ$.
+    \item \textbf{Context:} Immediately updates the 3D rendering and the orange wind vector arrow on the ground plane.
+\end{itemize}
+
+\subsection{3. Time ($t$) Slider}
+\begin{itemize}
+    \item \textbf{Definition:} A discrete timeline slider for advancing or reversing the solved numerical trajectory.
+    \item \textbf{Mechanism:} Selects array index $i$, mapping to the simulation time $t_i$. It queries the pre-computed arrays to extract total network twist $\alpha_{\text{tot}}(t_i)$ and rotor speed $\omega(t_i)$. It then calls the structural solver:
+    \begin{equation}
+        \tau_{\text{transmitted}} = k_{\text{eff}} \sin\left(\frac{\alpha_{\text{tot}}}{n_{\text{seg}}}\right)
+    \end{equation}
+    These loads dictate the tension and compression arrays mapped to the visual line colors.
+    \item \textbf{Rationale:} Exposes the transient kinematic behavior of the turbine. Crucial for pinpointing the exact fractional second of maximum tether tension $T_{\text{max}}$ or catastrophic aerodynamic collapse.
+    \item \textbf{Interaction:} Drag manually to scrub frame-by-frame.
+    \item \textbf{Context:} Heavily utilized post-simulation to inspect the visual manifestation of the differential equation solution.
+\end{itemize}
+
+\subsection{4. Play / Pause Button}
+\begin{itemize}
+    \item \textbf{Definition:} A toggle button that automates the progression of the Time ($t$) Slider.
+    \item \textbf{Mechanism:} Initiates an asynchronous Julia \texttt{@async} loop that increments the time slider's index based on a $30$ FPS visual delay (\texttt{sleep(1/30)}) until $n_{\text{frames}}$ is reached.
+    \item \textbf{Rationale:} Provides fluid visual playback of the structural transient response, allowing engineers to visualize wave propagations through the tensegrity network without manual interference.
+    \item \textbf{Interaction:} Click to start playback; click again to pause.
+    \item \textbf{Context:} Operates exclusively on the currently cached ODE trajectory arrays.
+\end{itemize}
+
+\subsection{5. Solver Menu}
+\begin{itemize}
+    \item \textbf{Definition:} A dropdown menu governing the numerical integration scheme for \texttt{DifferentialEquations.jl}.
+    \item \textbf{Mechanism:} Maps selections to specific solver algorithms: \texttt{"Tsit5"} (Tsitouras 5/4 Runge-Kutta), \texttt{"RK4"} (fixed-step 4th order), and \texttt{"Euler"}. These dictate how the state derivations $\frac{d\alpha_{\text{tot}}}{dt}$ and $\frac{d\omega}{dt}$ step through time.
+    \item \textbf{Rationale:} Allows the aerodynamic researcher to balance evaluation speed against numerical stiffness. Severe gust events may cause explicit Euler solvers to artificially drift or explode, necessitating robust, adaptive stepping like Tsit5.
+    \item \textbf{Interaction:} Click the dropdown and select the preferred algorithm.
+    \item \textbf{Context:} Evaluated strictly upon pressing the "Re-run ODE" button.
+\end{itemize}
+
+\subsection{6. Enable re-run Toggle}
+\begin{itemize}
+    \item \textbf{Definition:} A UI safety checkbox that acts as a prerequisite lock for the execution button.
+    \item \textbf{Mechanism:} Modifies a boolean \texttt{Observable}. The Re-run ODE button enforces an early return (\texttt{enable\_toggle.active[] || return}) if this state is false.
+    \item \textbf{Rationale:} Prevents accidental, computationally expensive ODE recalculations when aggressively dragging the input parameter sliders.
+    \item \textbf{Interaction:} Click to check (enable) or uncheck (disable).
+    \item \textbf{Context:} Gatekeeps the bridge between visual exploration and dynamic recalculation.
+\end{itemize}
+
+\subsection{7. Wind speed ($V_{\text{ref}}$) Slider}
+\begin{itemize}
+    \item \textbf{Definition:} A slider prescribing the baseline Hellmann reference wind speed.
+    \item \textbf{Mechanism:} Sets $V_{\text{ref}}$, which calculates the wind available at the turbine hub using the boundary layer shear profile (where $\alpha_{\text{shear}} \approx 1/7$):
+    \begin{equation}
+        V_{\text{hub}} = V_{\text{ref}} \left( \frac{h_{\text{hub}}}{h_{\text{ref}}} \right)^{\alpha_{\text{shear}}}
+    \end{equation}
+    \item \textbf{Rationale:} Allows testing the turbine's response profile across its full power curve—validating survival loads at maximum extreme wind vectors and assessing cut-in viability at low speeds.
+    \item \textbf{Interaction:} Dragging along a linear scale encompassing $4.0$ m/s to $20.0$ m/s.
+    \item \textbf{Context:} Serves as the primary environmental input. Only impacts physics upon a "Re-run ODE" execution.
+\end{itemize}
+
+\subsection{8. Generator braking ($c_{\text{pto}}$) Slider}
+\begin{itemize}
+    \item \textbf{Definition:} A slider controlling the linear viscous damping coefficient of the ground-based Power Take-Off (PTO) unit.
+    \item \textbf{Mechanism:} Defines $c_{\text{pto}}$ (in N$\cdot$m$\cdot$s/rad) for the torque balancing equation:
+    \begin{equation}
+        \omega_{\text{ground}} = \frac{\tau_{\text{transmitted}}}{c_{\text{pto}}}
+    \end{equation}
+    This couples into the network twist ODE:
+    \begin{equation}
+        \frac{d\alpha_{\text{tot}}}{dt} = \omega - \omega_{\text{ground}}
+    \end{equation}
+    \item \textbf{Rationale:} Represents the absolute primary physical control actuator for the system. A balanced $c_{\text{pto}}$ maintains optimal Tip Speed Ratio ($\lambda$) for aerodynamic energy extraction. If set too low, the rotor spins to structural destruction; if set too high, the turbine stalls.
+    \item \textbf{Interaction:} Dragging along a logarithmic scale from $0.0$ (freewheel) up to $50,000.0$ N$\cdot$m$\cdot$s/rad.
+    \item \textbf{Context:} Critical state parameter evaluated upon "Re-run ODE".
+\end{itemize}
+
+\subsection{9. Re-run ODE Button}
+\begin{itemize}
+    \item \textbf{Definition:} The execution interface that triggers a recalculation of the system mechanics.
+    \item \textbf{Mechanism:} Parses $V_{\text{ref}}$, $c_{\text{pto}}$, $\beta$, and the solver choice to build a fresh \texttt{SystemParams} configuration. Dispatches the Initial Value Problem to \texttt{DifferentialEquations.jl}, resolving:
+    \begin{equation}
+        \frac{d\omega}{dt} = \frac{\tau_{\text{aero}} - \tau_{\text{drag}} - \tau_{\text{transmitted}}}{I_{\text{total}}}
+    \end{equation}
+    \item \textbf{Rationale:} Locks in the new boundary conditions and initiates the heavy differential-algebraic solver required to map the fluid-structure interaction across the duration of the scenario.
+    \item \textbf{Interaction:} user clicks to initiate processing (requires Enable Toggle to be active).
+    \item \textbf{Context:} The definitive trigger separating parameter selection from numerical integration.
+\end{itemize}
+
+
+\subsection{10. Time ($t$) Label}
+\begin{itemize}
+    \item \textbf{Definition:} A live text label indicating the current numerical simulation time.
+    \item \textbf{Mechanism:} Reads the value $t$ from the ODE trajectory array \texttt{traj.t[fi]} at the current frame index $fi$.
+    \item \textbf{Rationale:} Provides a clear temporal context for the transient events observed in the simulation.
+    \item \textbf{Interaction:} View only.
+    \item \textbf{Context:} Updates continuously as the Time Slider is advanced.
+\end{itemize}
+
+\subsection{11. Output power ($P$) Label}
+\begin{itemize}
+    \item \textbf{Definition:} A live text label displaying the instantaneous electrical output power in kW.
+    \item \textbf{Mechanism:} Extracts the \texttt{power\_kw} value from the trajectory, computed via $P = \tau_{\text{transmitted}} \omega_{\text{ground}} / 1000$.
+    \item \textbf{Rationale:} Highlights the primary commercial metric of the kite turbine, confirming whether generator damping maintains productive power generation.
+    \item \textbf{Interaction:} View only.
+    \item \textbf{Context:} Updates dynamically during scenario playback.
+\end{itemize}
+
+\subsection{12. Rotor speed ($\omega$) Label}
+\begin{itemize}
+    \item \textbf{Definition:} A live text label showing the airborne rotor's angular velocity in rad/s and RPM.
+    \item \textbf{Mechanism:} Reads the ODE state variable $\omega$ and converts it to RPM using $\text{RPM} = \omega \times \frac{60}{2\pi}$.
+    \item \textbf{Rationale:} Crucial for monitoring aerodynamic performance and Tip Speed Ratio ($\lambda$), ensuring the rotor stays within the optimal power extraction envelope without over-speeding.
+    \item \textbf{Interaction:} View only.
+    \item \textbf{Context:} Active alongside the ODE trajectory playback.
+\end{itemize}
+
+\subsection{13. Shaft twist / section ($\alpha$) Label}
+\begin{itemize}
+    \item \textbf{Definition:} A text readout presenting the absolute rotational twist experienced per TRPT shaft segment.
+    \item \textbf{Mechanism:} Divides the total structural twist ODE state variable $\alpha_{\text{tot}}$ by the number of segments ($n_{\text{seg}}$) and converts the quotient to degrees.
+    \item \textbf{Rationale:} Isolates the fractional torsion applied to the tensegrity network, translating system-wide strain into a localized metric for component-level stress evaluation.
+    \item \textbf{Interaction:} View only.
+    \item \textbf{Context:} Dynamically tracks structural torsion across time.
+\end{itemize}
+
+\subsection{14. Collapse margin Label}
+\begin{itemize}
+    \item \textbf{Definition:} A percentage indicator of the TRPT structure's proximity to catastrophic kinematic entanglement.
+    \item \textbf{Mechanism:} Computes the margin based on the geometric limit of $\pi$ radians per segment: $\text{Margin} = \max\left(0, \left(1 - \frac{|\alpha_{\text{tot}}| / n_{\text{seg}}}{\pi}\right) \times 100\right)\%$. The system enforces a $0.95\pi$ physical limit.
+    \item \textbf{Rationale:} Translates raw twist angles into an immediate safety factor, alerting the engineer if the generator braking torque $c_{\text{pto}}$ is failing to adequately stabilize the rotor.
+    \item \textbf{Interaction:} View only.
+    \item \textbf{Context:} Visually accompanies the 3D strain rendering.
+\end{itemize}
+
+\subsection{15. Wind at hub ($V$) Label}
+\begin{itemize}
+    \item \textbf{Definition:} A text display reporting the current wind velocity intersected by the spinning rotor at its defined altitude.
+    \item \textbf{Mechanism:} Retrieves the localized wind speed $V_{\text{hub}}$, initially computed via the Hellmann exponential shear profile formula for that specific frame limits.
+    \item \textbf{Rationale:} Contextualizes all aerodynamic performance metrics against the available freestream energy density at altitude.
+    \item \textbf{Interaction:} View only.
+    \item \textbf{Context:} Evaluated and displayed continuously during the simulation.
+\end{itemize}
+
+\subsection{16. Tether tension Colorbar \& Limits}
+\begin{itemize}
+    \item \textbf{Definition:} A color-coded scale and numeric text displaying the minimum, maximum, and Factor of Safety (FoS) for dyneema tether lines within the current frame.
+    \item \textbf{Mechanism:} Executes the \texttt{element\_forces} function upon the current $[\alpha, \omega, V_{\text{hub}}]$ state to compute localized axial tether strain $T_i$. It processes bounds against a $3500$ N Safe Working Load (SWL) limit and colors the 3D tether network via an RGB gradient ($0$ N = Blue, $\ge 3500$ N = Red). FoS is $3500 / \max(T_i)$.
+    \item \textbf{Rationale:} Immediately maps the internal visual 3D stress gradients to quantified engineering load limits for the structural dyneema lines.
+    \item \textbf{Interaction:} View only.
+    \item \textbf{Context:} Updated every frame during the ODE scrubbing mechanism.
+\end{itemize}
+
+\subsection{17. Ring compression Colorbar \& Limits}
+\begin{itemize}
+    \item \textbf{Definition:} A color-coded numeric display mapping the minimum, maximum, and FoS of the hoop compression forces acting on the CFRP spacer rings.
+    \item \textbf{Mechanism:} Computes ring compression via $C_i = \frac{T_i \cdot r_i}{2 \sin(\pi / n_{\text{lines}})}$. It evaluates arrays and safety factors against a $500$ N SWL limit. The associated 3D ring visual is dynamically re-colored from blue to red.
+    \item \textbf{Rationale:} Analyzes the discrete polygon collapse limits of the TRPT system, preventing the engineer from ignoring localized buckling phenomena along the tapered shaft.
+    \item \textbf{Interaction:} View only.
+    \item \textbf{Context:} Updates simultaneously with internal telemetry.
+\end{itemize}
+
+\subsection{18. $T_{\text{peak}}$ Label}
+\begin{itemize}
+    \item \textbf{Definition:} A static text label declaring the absolute maximum dyneema line tension recorded across the entire simulation time series.
+    \item \textbf{Mechanism:} Extracted iteratively via \texttt{run\_force\_scan()}, which cascades through all time frames to isolate the singular $T_{\text{max}}$ and its resultant worst-case FoS constraint.
+    \item \textbf{Rationale:} Protects researchers from manually missing microsecond stress spikes during aggressive turbulent gust events.
+    \item \textbf{Interaction:} View only.
+    \item \textbf{Context:} Recalculated upon the completion of a "Re-run ODE" action.
+\end{itemize}
+
+\subsection{19. $C_{\text{peak}}$ Label}
+\begin{itemize}
+    \item \textbf{Definition:} A static text read-out declaring the maximum ring hoop compression experienced throughout the computed scenario.
+    \item \textbf{Mechanism:} Processed sequentially via \texttt{run\_force\_scan()}, locking the global maximum $C_{\text{max}}$ and determining the most critical structural FoS against the CFRP tube buckling limits.
+    \item \textbf{Rationale:} Assures definitive confirmation of structural viability over the complete duration of complex, time-varying aerodynamic wind arrays.
+    \item \textbf{Interaction:} View only.
+    \item \textbf{Context:} Remains static during playback; updates entirely upon ODE recalculation.
+\end{itemize}
+
+\section{Technical Glossary}
+\begin{description}
+    \item[TRPT (Tensile Rotary Power Transmission)] A mechanical power transmission architecture that replaces rigid shafts with a flexible, tensegrity network of tensioned tethers and compression rings, transmitting torque from a high-altitude rotor to a ground-based generator.
+    \item[FSI (Fluid-Structure Interaction)] The coupled physical behavior where aerodynamic fluid forces (lift and drag) deform a solid structure (the kite and tether network), and that structural deformation subsequently alters the aerodynamic boundary conditions.
+    \item[PTO (Power Take-Off)] The ground-based electromechanical system (typically a generator and gearbox or direct-drive assembly) responsible for resisting the mechanical torque of the shaft to extract electrical power. Simulated via viscous damping coefficient $c_{\text{pto}}$.
+    \item[TSR (Tip Speed Ratio, $\lambda$)] The non-dimensional ratio of the rotor tip's tangential velocity to the freestream wind velocity. Defined as $\lambda = \frac{\omega R}{V_{\text{hub}}}$. Critical for determining aerodynamic efficiency ($C_p$) and thrust ($C_t$).
+    \item[Hellmann Wind Shear Profile] An empirical power-law relationship describing the exponential increase of wind speed with altitude in the boundary layer: $V(h) = V_{\text{ref}} (h/h_{\text{ref}})^\alpha$, where $\alpha \approx 1/7$ over open terrain.
+    \item[Kinematic Collapse Margin] A percentage metric evaluating the twist along the TRPT shaft. The network suffers catastrophic kinematic collapse (tethers crossing and tangling) when the average twist per segment approaches $\pi$ radians. The simulation enforces a strict shutdown at $0.95\pi$.
+    \item[ODE (Ordinary Differential Equation)] A mathematical equation containing one or more functions of one independent variable and their derivatives. Used here to solve the transient rotational speed ($\omega$) and total network twist ($\alpha_{\text{tot}}$) over time.
+    \item[Tsit5 (Tsitouras 5/4 Runge-Kutta)] An adaptive-step-size numerical integrator highly efficient for non-stiff or mildly stiff ODEs, balancing computational speed with high accuracy during transient gust events.
+    \item[Factor of Safety (FoS)] The ratio indicating structural margin, calculated by dividing the absolute Safe Working Load (SWL) of a component (e.g., dyneema tether or CFRP ring) by the actual maximum force experienced during the simulation run.
+\end{description}
+
+\section{Reference List}
+The physical equations, aerodynamic datasets, and numerical proxies enclosed within the simulation software are derived directly from the following foundational engineering documents and external models:
+\begin{enumerate}
+    \item \textbf{"Rotary AWES Julia Simulation Framework.pdf"}: The primary design document establishing the analytical TRPT stiffness formulation (§3–§5) and the core coupled Fluid-Structure Interaction mathematical framework.
+    \item \textbf{"Kite Turbine Mass Scaling Analysis.pdf"}: Source material for establishing the non-linear scaling laws of the TRPT system, specifically the empirical $1.35$ geometric mass exponent and the Drivetrain Mass/Inertia Matching logic ($I_{\text{pto}}$).
+    \item \textbf{"Rotor\_TRTP\_Sizing\_Iteration2.xlsx"}: The foundational AeroDyn Blade Element Momentum (BEM) dataset that provides the discrete aerodynamic look-up tables for Power Coefficient ($C_p$) and Thrust Coefficient ($C_t$) as functions of Tip Speed Ratio ($\lambda$).
+    \item \textbf{Tulloch \& Yue (2008)}, AWEC proceedings detailing the standard integration model for predicting transient aerodynamic tether drag on moving lines, heavily utilized in the numerical calculation of $\tau_{\text{drag}}$.
+\end{enumerate}
+
+\end{document}
