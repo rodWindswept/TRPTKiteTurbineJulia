@@ -338,7 +338,7 @@ function _build_controls!(layout, p, p_obs, traj_obs,
     is_playing = Observable(false)
     on(play_btn.clicks) do _
         is_playing[] = !is_playing[]
-        play_btn.label[] = is_playing[] ? "⏸ Pause" : "▶ Play"
+        play_btn.label[] = is_playing[] ? "|| Pause" : "▶ Play"
     end
     @async while true
         if is_playing[]
