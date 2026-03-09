@@ -1,12 +1,12 @@
 # scripts/power_curve.jl
 # Sweep wind speeds from 4 to 16 m/s (1 m/s steps) and compute steady-state
 # ground power for both 10 kW and 50 kW configurations.
-# Outputs a printed table and saves output/power_curve.csv.
+# Outputs a printed table, output/power_curve.csv, and output/power_curve.png.
 #
 # Usage:
 #   julia --project=. scripts/power_curve.jl
 
-using DifferentialEquations, DataFrames, CSV, Statistics
+using DifferentialEquations, DataFrames, CSV, Statistics, Plots
 
 include("../src/parameters.jl")
 include("../src/wind_profile.jl")
@@ -58,3 +58,23 @@ end
 csv_path = "output/power_curve.csv"
 CSV.write(csv_path, all_rows)
 println("\nSaved → $csv_path  ($(nrow(all_rows)) rows)")
+
+# Plot both curves on one chart
+plt = plot(;
+    xlabel = "Wind speed at hub (m/s)",
+    ylabel = "Ground power (kW)",
+    title  = "TRPT Kite Turbine — Power Curve",
+    legend = :topleft,
+    grid   = true,
+    size   = (800, 500),
+)
+for (label, p) in configs
+    rows = filter(r -> r.config == label, all_rows)
+    plot!(plt, rows.v_ref_ms, rows.power_kw;
+          label = "$label  (R=$(round(p.rotor_radius, digits=1)) m)",
+          lw = 2, marker = :circle, markersize = 4)
+end
+
+png_path = "output/power_curve.png"
+savefig(plt, png_path)
+println("Saved → $png_path")
