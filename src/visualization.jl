@@ -289,8 +289,8 @@ function _build_controls!(layout, p, p_obs, traj_obs,
     elev_val_lbl = Label(layout[2, 1],
                          "Shaft tilt above horizon  β = $(round(rad2deg(p.elevation_angle), digits=0))°";
                          halign=:left)
-    elev_slider = Slider(layout[3, 1]; range=0.0:1.0:75.0,
-                         startvalue=rad2deg(p.elevation_angle))
+    elev_slider = Slider(layout[3, 1]; range=23.0:1.0:75.0,
+                         startvalue=clamp(rad2deg(p.elevation_angle), 23.0, 75.0))
     on(elev_slider.value) do v
         elev_val_lbl.text[] = "Shaft tilt above horizon  β = $(round(v, digits=0))°"
     end
