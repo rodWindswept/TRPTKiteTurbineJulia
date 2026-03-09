@@ -1,6 +1,7 @@
 # scripts/run_wind_ramp.jl
-# Interactive dashboard with a linear wind ramp: 6 → 14 m/s over t = 20–100 s.
-# Demonstrates rotor response to a gradual increase in wind speed.
+# Interactive dashboard with a linear wind ramp: 6 → 23 m/s over t = 20–100 s.
+# Demonstrates rotor response to a gradual increase in wind speed (no power limiter).
+# For the elevation-angle power limiter version, use run_wind_ramp_limited.jl.
 #
 # Usage:
 #   julia --project=. scripts/run_wind_ramp.jl
@@ -18,21 +19,26 @@ include("../src/visualization.jl")
 mkpath("output")
 
 const SIM_DURATION = 120.0
+const V_START      = 6.0
+const V_END        = 23.0
 
 p = params_10kw()
 
-# Wind function: reference speed ramps from 6 → 14 m/s between t=20 and t=100 s
-wind_fn = wind_ramp(6.0, 14.0, 20.0, 100.0)
+# Wind function: reference speed ramps from V_START → V_END between t=20 and t=100 s
+wind_fn = wind_ramp(V_START, V_END, 20.0, 100.0)
 
-println("Wind ramp: 6 → 14 m/s over t=20–100 s")
+h_hub  = hub_altitude(p.tether_length, p.elevation_angle)
+v_hub0 = wind_at_altitude(V_START, p.h_ref, h_hub)
+ω0     = 4.1 * v_hub0 / p.rotor_radius   # warm-start near optimal TSR
+
+println("Wind ramp: $(V_START) → $(V_END) m/s over t=20–100 s  (no limiter — 2-state MPPT)")
 println("Solving $(SIM_DURATION) s ODE...")
 
-sol = solve(ODEProblem(trpt_ode_wind!, [0.0, 1.0], (0.0, SIM_DURATION), (p, wind_fn)),
+sol = solve(ODEProblem(trpt_ode_wind!, [0.0, ω0], (0.0, SIM_DURATION), (p, wind_fn)),
             Tsit5(); reltol=1e-6, abstol=1e-6, saveat=1/30)
 println("  $(length(sol.t)) frames  retcode: $(sol.retcode)")
 
 # Build v_hub time series at hub altitude for each frame
-h_hub    = hub_altitude(p.tether_length, p.elevation_angle)
 v_hub_ts = [wind_at_altitude(wind_fn(t), p.h_ref, h_hub) for t in sol.t]
 
 traj = (

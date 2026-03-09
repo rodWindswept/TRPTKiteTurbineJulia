@@ -189,7 +189,7 @@ function _build_hud!(layout, p, p_obs, traj_obs, time_obs,
     twist_lbl  = lbl(5, "Shaft twist / section  α =   0.0°")
     margin_lbl = lbl(6, "Collapse margin:  100.0%")
     wind_lbl   = lbl(7, "Wind at hub  V =   0.00 m/s")
-    lbl(8, "")
+    elev_lbl   = lbl(8, @sprintf("Elevation  β = %5.1f°", rad2deg(p.elevation_angle)))
 
     # ── Structural load panel with colour scale guide ──────────────────────
     lbl(9, "Structural Loads (this frame)"; fontsize=14, font=:bold)
@@ -244,6 +244,7 @@ function _build_hud!(layout, p, p_obs, traj_obs, time_obs,
         twist_lbl.text[]  = @sprintf("Shaft twist / section  α = %5.1f°",    alpha_s)
         margin_lbl.text[] = @sprintf("Collapse margin: %5.1f%%",             margin)
         wind_lbl.text[]   = @sprintf("Wind at hub  V = %5.2f m/s",           v_hub)
+        elev_lbl.text[]   = @sprintf("Elevation  β = %5.1f°",               traj.beta[fi])
 
         u_frame = [alpha, omega]
         fs      = element_forces(p_obs[], u_frame, v_hub)
@@ -317,6 +318,15 @@ function _build_controls!(layout, p, p_obs, traj_obs,
     Label(layout[7, 1], "Time"; halign=:left)
     time_slider = Slider(layout[8, 1]; range=1:n_frames, startvalue=1)
 
+    # For 3-state (limiter) trajectories: animate shaft tilt from the β trace during playback
+    # For 2-state (fixed β) trajectories: beta_vec is constant so no visible change
+    on(time_slider.value) do fi
+        β_deg = traj_obs[].beta[fi]
+        β  = deg2rad(β_deg)
+        φw = deg2rad(azimuth_slider.value[])
+        shaft_dir_obs[] = [cos(φw)*cos(β), sin(φw)*cos(β), sin(β)]
+    end
+
     play_row    = GridLayout(layout[9, 1])
     play_btn    = Button(play_row[1, 1]; label="▶ Play")
     Label(play_row[1, 2], "Solver:"; halign=:right)
@@ -379,7 +389,8 @@ function _build_controls!(layout, p, p_obs, traj_obs,
                              p.rotor_radius, p.tether_length, p.trpt_hub_radius,
                              p.trpt_rL_ratio, p.n_lines, p.tether_diameter,
                              p.e_modulus, p.n_rings, p.m_ring, p.n_blades,
-                             p.m_blade, p.cp, p.i_pto, k_new)
+                             p.m_blade, p.cp, p.i_pto, k_new,
+                             p.p_rated_w, p.β_min, p.β_max, p.β_rate_max, p.kp_elev)
 
         solver = if solver_menu.selection[] == "Tsit5"
             Tsit5()
@@ -394,11 +405,12 @@ function _build_controls!(layout, p, p_obs, traj_obs,
                  (saveat=1/30, dt=0.01) :
                  (reltol=1e-6, abstol=1e-6, saveat=1/30)
 
-        sol_new = solve(ODEProblem(trpt_ode!, [0.0, 1.0], (0.0, 120.0), p_new),
+        h_hub_new = hub_altitude(p_new.tether_length, p_new.elevation_angle)
+        v_hub_new = wind_at_altitude(p_new.v_wind_ref, p_new.h_ref, h_hub_new)
+        ω_warm    = 4.1 * v_hub_new / p_new.rotor_radius   # warm-start near optimal TSR
+        sol_new = solve(ODEProblem(trpt_ode!, [0.0, ω_warm], (0.0, 120.0), p_new),
                         solver; kwargs...)
 
-        h_hub_new   = hub_altitude(p_new.tether_length, p_new.elevation_angle)
-        v_hub_new   = wind_at_altitude(p_new.v_wind_ref, p_new.h_ref, h_hub_new)
         n_frames_new = length(sol_new.t)
         # v_hub must be Vector{Float64} to match the type of traj_obs (set at scene build)
         v_hub_vec = fill(v_hub_new, n_frames_new)
@@ -409,6 +421,7 @@ function _build_controls!(layout, p, p_obs, traj_obs,
             power_kw  = [instantaneous_power(p_new, [sol_new[1,i], sol_new[2,i]]) / 1000.0
                          for i in eachindex(sol_new.t)],
             v_hub     = v_hub_vec,
+            beta      = fill(rad2deg(β_new), n_frames_new),
         )
 
         u_frames = [[new_traj.alpha_tot[i], new_traj.omega[i]] for i in eachindex(new_traj.t)]
@@ -450,8 +463,11 @@ function build_trpt_scene(p::SystemParams, traj)
     T_max_run, C_max_run = run_force_scan(p, u_frames, vhv)
 
     n_seg     = p.n_rings + 1
+    # Normalise optional beta trace (3-state limiter trajectories include it)
+    beta_vec  = hasproperty(traj, :beta) ? traj.beta :
+                fill(rad2deg(p.elevation_angle), n_frames)
     traj_norm = (t=traj.t, alpha_tot=traj.alpha_tot, omega=traj.omega,
-                 power_kw=traj.power_kw, v_hub=vhv)
+                 power_kw=traj.power_kw, v_hub=vhv, beta=beta_vec)
     p_obs           = Observable(p)
     traj_obs        = Observable(traj_norm)
     T_max_obs       = Observable(T_max_run)
