@@ -97,8 +97,12 @@ function params_10kw()::SystemParams
     # h_ref = hub altitude; v_wind_ref is rated hub wind speed (11 m/s, from DRR / AeroDyn data)
     return SystemParams(
         1.225,           # rho (kg/m³)
-        11.0,            # v_wind_ref (m/s) at hub — rated wind speed (DRR; AeroDyn sizing)
-        15.0,            # h_ref (m) — hub altitude = 30 × sin(π/6)
+        11.0,            # v_wind_ref (m/s) — rated wind speed at h_ref (DRR; AeroDyn sizing)
+        15.0,            # h_ref (m) — reference (measurement) altitude; set equal to hub altitude
+                         #   (30 × sin(30°) = 15 m) so v_wind_ref is specified directly at hub.
+                         #   Hellmann wind shear is active when elevation angle changes (hub
+                         #   altitude moves away from h_ref). Use a met-mast height here if
+                         #   you have wind data from a fixed anemometer at a different height.
         π / 6,           # elevation_angle = 30° (as physically built; DRR)
         deg2rad(70.0),   # lifter_elevation = 70° (typical operating angle for launch/landing lifter kite line)
         5.0,             # rotor_radius R (m) — Framework PDF §5.3 (aerodynamic outer radius)

@@ -18,7 +18,7 @@ end
 
 # ── 3D axes builder ────────────────────────────────────────────────────────────
 
-function _build_3d_axes!(fig, position, p, traj_obs, shaft_dir_obs,
+function _build_3d_axes!(fig, position, p, p_obs, traj_obs, shaft_dir_obs,
                           T_max_obs, C_max_obs, time_obs)
     ax3d = Axis3(fig[position...],
                  title  = "TRPT Kite Turbine — Live Geometry",
@@ -67,7 +67,7 @@ function _build_3d_axes!(fig, position, p, traj_obs, shaft_dir_obs,
             u     = [traj.alpha_tot[$time_obs], traj.omega[$time_obs]]
             vhv   = traj.v_hub
             v_hub = vhv isa AbstractVector ? vhv[$time_obs] : vhv
-            fs    = element_forces(p, u, v_hub)
+            fs    = element_forces($p_obs, u, v_hub)
             colors = Vector{RGBf}(undef, n_levels)
             colors[1] = _force_color(fs.tether_tension[1], TETHER_SWL)
             for ii in 2:n_levels
@@ -90,7 +90,7 @@ function _build_3d_axes!(fig, position, p, traj_obs, shaft_dir_obs,
             u     = [traj.alpha_tot[$time_obs], traj.omega[$time_obs]]
             vhv   = traj.v_hub
             v_hub = vhv isa AbstractVector ? vhv[$time_obs] : vhv
-            fs    = element_forces(p, u, v_hub)
+            fs    = element_forces($p_obs, u, v_hub)
             _force_color(fs.ring_compression[i - 1], RING_SWL)
         end
         lines!(ax3d, ring_x, ring_y, ring_z; color=rc, linewidth=1.0)
@@ -173,7 +173,9 @@ end
 
 # ── HUD builder ────────────────────────────────────────────────────────────────
 
-function _build_hud!(layout, p, traj_obs, time_obs, T_max_obs, C_max_obs)
+function _build_hud!(layout, p, p_obs, traj_obs, time_obs,
+                     T_max_obs, C_max_obs,
+                     P_max_obs, omega_max_obs, v_max_obs, alpha_s_max_obs)
     # Fixed column width prevents label jitter as numbers change width
     colsize!(layout, 1, Fixed(320))
 
@@ -214,8 +216,12 @@ function _build_hud!(layout, p, traj_obs, time_obs, T_max_obs, C_max_obs)
 
     # ── Run-wide peak summary ──────────────────────────────────────────────
     lbl(17, "Run peaks (all frames)"; fontsize=12, font=:bold)
-    t_peak_lbl = lbl(18, "T_peak     0 N  ·  FoS  —")
-    c_peak_lbl = lbl(19, "C_peak     0 N  ·  FoS  —")
+    t_peak_lbl     = lbl(18, "T_peak       0 N  ·  FoS  —")
+    c_peak_lbl     = lbl(19, "C_peak       0 N  ·  FoS  —")
+    p_peak_lbl     = lbl(20, "P_peak    0.00 kW")
+    omega_peak_lbl = lbl(21, "ω_peak   0.000 rad/s  (   0.0 rpm)")
+    v_peak_lbl     = lbl(22, "V_peak    0.00 m/s")
+    twist_peak_lbl = lbl(23, "α_peak     0.0° / section")
 
     n_seg = p.n_rings + 1
     fos_str(v) = (isinf(v) || isnan(v)) ? "  ∞" : @sprintf("%5.1f", v)
@@ -240,7 +246,7 @@ function _build_hud!(layout, p, traj_obs, time_obs, T_max_obs, C_max_obs)
         wind_lbl.text[]   = @sprintf("Wind at hub  V = %5.2f m/s",           v_hub)
 
         u_frame = [alpha, omega]
-        fs      = element_forces(p, u_frame, v_hub)
+        fs      = element_forces(p_obs[], u_frame, v_hub)
         T_min_f = minimum(fs.tether_tension)
         T_max_f = maximum(fs.tether_tension)
         C_min_f = minimum(fs.ring_compression)
@@ -253,18 +259,31 @@ function _build_hud!(layout, p, traj_obs, time_obs, T_max_obs, C_max_obs)
         c_minmax_lbl.text[] = @sprintf("min %5.0f N  ·  max %5.0f N  ·  FoS %s",
                                         C_min_f, C_max_f, fos_str(C_fos_f))
 
-        T_peak = T_max_obs[]
-        C_peak = C_max_obs[]
-        t_peak_lbl.text[] = @sprintf("T_peak %5.0f N  ·  FoS %s",
-                                      T_peak, fos_str(T_peak > 0 ? TETHER_SWL / T_peak : Inf))
-        c_peak_lbl.text[] = @sprintf("C_peak %5.0f N  ·  FoS %s",
-                                      C_peak, fos_str(C_peak > 0 ? RING_SWL   / C_peak : Inf))
+        T_peak     = T_max_obs[]
+        C_peak     = C_max_obs[]
+        P_peak     = P_max_obs[]
+        omega_peak = omega_max_obs[]
+        v_peak     = v_max_obs[]
+        alpha_s_pk = alpha_s_max_obs[]
+        rpm_peak   = omega_peak * 60.0 / (2π)
+
+        t_peak_lbl.text[]     = @sprintf("T_peak  %5.0f N  ·  FoS %s",
+                                          T_peak, fos_str(T_peak > 0 ? TETHER_SWL / T_peak : Inf))
+        c_peak_lbl.text[]     = @sprintf("C_peak  %5.0f N  ·  FoS %s",
+                                          C_peak, fos_str(C_peak > 0 ? RING_SWL   / C_peak : Inf))
+        p_peak_lbl.text[]     = @sprintf("P_peak  %6.2f kW", P_peak)
+        omega_peak_lbl.text[] = @sprintf("ω_peak  %7.3f rad/s  (%6.1f rpm)", omega_peak, rpm_peak)
+        v_peak_lbl.text[]     = @sprintf("V_peak  %5.2f m/s", v_peak)
+        twist_peak_lbl.text[] = @sprintf("α_peak  %5.1f° / section", rad2deg(alpha_s_pk))
     end
 end
 
 # ── Controls builder ───────────────────────────────────────────────────────────
 
-function _build_controls!(layout, p, traj_obs, T_max_obs, C_max_obs, n_frames)
+function _build_controls!(layout, p, p_obs, traj_obs,
+                          T_max_obs, C_max_obs,
+                          P_max_obs, omega_max_obs, v_max_obs, alpha_s_max_obs,
+                          n_frames)
     Label(layout[1, 1], "Controls"; fontsize=14, font=:bold, halign=:left)
 
     elev_val_lbl = Label(layout[2, 1],
@@ -279,6 +298,8 @@ function _build_controls!(layout, p, traj_obs, T_max_obs, C_max_obs, n_frames)
     azimuth_val_lbl = Label(layout[4, 1],
                              "Wind direction  φ = 0°"; halign=:left)
     azimuth_slider = Slider(layout[5, 1]; range=0.0:1.0:360.0, startvalue=0.0)
+    Label(layout[6, 1], "Visual only — yaws geometry; physics always head-to-wind";
+          halign=:left, fontsize=9, color=:grey60)
     on(azimuth_slider.value) do v
         azimuth_val_lbl.text[] = "Wind direction  φ = $(round(v, digits=0))°"
     end
@@ -293,15 +314,15 @@ function _build_controls!(layout, p, traj_obs, T_max_obs, C_max_obs, n_frames)
     on(update_shaft!, elev_slider.value)
     on(update_shaft!, azimuth_slider.value)
 
-    Label(layout[6, 1], "Time"; halign=:left)
-    time_slider = Slider(layout[7, 1]; range=1:n_frames, startvalue=1)
+    Label(layout[7, 1], "Time"; halign=:left)
+    time_slider = Slider(layout[8, 1]; range=1:n_frames, startvalue=1)
 
-    play_row    = GridLayout(layout[8, 1])
+    play_row    = GridLayout(layout[9, 1])
     play_btn    = Button(play_row[1, 1]; label="▶ Play")
     Label(play_row[1, 2], "Solver:"; halign=:right)
     solver_menu = Menu(play_row[1, 3]; options=["Tsit5", "RK4", "Euler"], default="Tsit5")
     Label(play_row[2, 1:3],
-          "Tsit5 — adaptive, accurate  ·  RK4 — fixed-step  ·  Euler — fast, may drift";
+          "Tsit5 — adaptive  ·  RK4 — fixed-step  ·  Euler — fast, may drift";
           fontsize=9, halign=:left, color=:grey60)
 
     is_playing = Observable(false)
@@ -322,35 +343,38 @@ function _build_controls!(layout, p, traj_obs, T_max_obs, C_max_obs, n_frames)
     end
 
     # Dynamic simulation re-run panel
-    Label(layout[9, 1], "Simulation Re-run"; fontsize=13, font=:bold, halign=:left)
-    enable_toggle = Toggle(layout[10, 1])
-    Label(layout[10, 2], "Enable re-run"; halign=:left)
+    Label(layout[10, 1], "Simulation Re-run"; fontsize=13, font=:bold, halign=:left)
+    enable_toggle = Toggle(layout[11, 1])
+    Label(layout[11, 2], "Unlock re-run"; halign=:left)
+    Label(layout[12, 1], "Replaces trajectory · uses β, V_ref, c_pto below";
+          halign=:left, fontsize=9, color=:grey60)
 
-    Label(layout[11, 1], "Wind speed  V_ref (m/s)"; halign=:left)
-    v_wind_slider = Slider(layout[12, 1]; range=4.0:0.5:20.0, startvalue=p.v_wind_ref)
-    v_wind_lbl = Label(layout[13, 1],
+    Label(layout[13, 1], "Wind speed  V_ref (m/s)"; halign=:left)
+    v_wind_slider = Slider(layout[14, 1]; range=4.0:0.5:20.0, startvalue=p.v_wind_ref)
+    v_wind_lbl = Label(layout[15, 1],
                        @sprintf("%.1f m/s", p.v_wind_ref); halign=:left)
     on(v_wind_slider.value) do v
         v_wind_lbl.text[] = @sprintf("%.1f m/s", v)
     end
 
-    Label(layout[14, 1], "Generator braking  c_pto (N·m·s/rad)"; halign=:left)
+    Label(layout[16, 1], "Generator braking  c_pto (N·m·s/rad)"; halign=:left)
     c_pto_range = vcat([0.0], exp10.(range(0.0, log10(50000.0), length=199)))
-    c_pto_slider = Slider(layout[15, 1]; range=c_pto_range, startvalue=p.c_pto)
-    c_pto_lbl = Label(layout[16, 1],
+    c_pto_slider = Slider(layout[17, 1]; range=c_pto_range, startvalue=p.c_pto)
+    c_pto_lbl = Label(layout[18, 1],
                       @sprintf("%.0f N·m·s/rad", p.c_pto); halign=:left)
     on(c_pto_slider.value) do v
         c_pto_lbl.text[] = v == 0.0 ? "0  (freewheel)" :
                                        @sprintf("%.0f N·m·s/rad", v)
     end
 
-    rerun_btn = Button(layout[17, 1]; label="Re-run ODE")
+    rerun_btn = Button(layout[19, 1]; label="Re-run ODE (120 s)")
     on(rerun_btn.clicks) do _
         enable_toggle.active[] || return
 
-        c_new = c_pto_slider.value[]
-        v_new = v_wind_slider.value[]
-        p_new = SystemParams(p.rho, v_new, p.h_ref, p.elevation_angle,
+        c_new   = c_pto_slider.value[]
+        v_new   = v_wind_slider.value[]
+        β_new   = deg2rad(elev_slider.value[])   # shaft tilt from elevation slider
+        p_new = SystemParams(p.rho, v_new, p.h_ref, β_new,
                              p.lifter_elevation,
                              p.rotor_radius, p.tether_length, p.trpt_hub_radius,
                              p.trpt_rL_ratio, p.n_lines, p.tether_diameter,
@@ -365,32 +389,44 @@ function _build_controls!(layout, p, traj_obs, T_max_obs, C_max_obs, n_frames)
             Euler()
         end
 
+        # Euler is fixed-step — reltol/abstol do not apply; adaptive solvers use both
         kwargs = solver_menu.selection[] == "Euler" ?
-                 (reltol=1e-6, abstol=1e-6, saveat=1/30, dt=0.01) :
+                 (saveat=1/30, dt=0.01) :
                  (reltol=1e-6, abstol=1e-6, saveat=1/30)
 
         sol_new = solve(ODEProblem(trpt_ode!, [0.0, 1.0], (0.0, 120.0), p_new),
                         solver; kwargs...)
 
-        h_hub_new = hub_altitude(p_new.tether_length, p_new.elevation_angle)
-        v_hub_new = wind_at_altitude(p_new.v_wind_ref, p_new.h_ref, h_hub_new)
+        h_hub_new   = hub_altitude(p_new.tether_length, p_new.elevation_angle)
+        v_hub_new   = wind_at_altitude(p_new.v_wind_ref, p_new.h_ref, h_hub_new)
+        n_frames_new = length(sol_new.t)
+        # v_hub must be Vector{Float64} to match the type of traj_obs (set at scene build)
+        v_hub_vec = fill(v_hub_new, n_frames_new)
         new_traj = (
             t         = sol_new.t,
             alpha_tot = sol_new[1, :],
             omega     = sol_new[2, :],
             power_kw  = [instantaneous_power(p_new, [sol_new[1,i], sol_new[2,i]]) / 1000.0
                          for i in eachindex(sol_new.t)],
-            v_hub     = v_hub_new,
+            v_hub     = v_hub_vec,
         )
 
         u_frames = [[new_traj.alpha_tot[i], new_traj.omega[i]] for i in eachindex(new_traj.t)]
-        v_hubs   = fill(v_hub_new, length(new_traj.t))
-        T_new, C_new = run_force_scan(p_new, u_frames, v_hubs)
+        T_new, C_new = run_force_scan(p_new, u_frames, v_hub_vec)
 
-        traj_obs[]  = new_traj
-        T_max_obs[] = T_new
-        C_max_obs[] = C_new
+        n_seg_new = p_new.n_rings + 1
+        p_obs[]           = p_new
+        traj_obs[]        = new_traj
+        T_max_obs[]       = T_new
+        C_max_obs[]       = C_new
+        P_max_obs[]       = maximum(new_traj.power_kw)
+        omega_max_obs[]   = maximum(abs.(new_traj.omega))
+        v_max_obs[]       = v_hub_new
+        alpha_s_max_obs[] = maximum(abs.(new_traj.alpha_tot)) / n_seg_new
         set_close_to!(time_slider, 1)
+        # Force HUD refresh — set_close_to! is a no-op when slider is already at 1,
+        # so the on(time_obs) callback would not fire and peak labels would stay stale.
+        notify(time_slider.value)
     end
 
     return time_slider, shaft_dir_obs
@@ -413,11 +449,17 @@ function build_trpt_scene(p::SystemParams, traj)
     u_frames  = [[traj.alpha_tot[i], traj.omega[i]] for i in 1:n_frames]
     T_max_run, C_max_run = run_force_scan(p, u_frames, vhv)
 
+    n_seg     = p.n_rings + 1
     traj_norm = (t=traj.t, alpha_tot=traj.alpha_tot, omega=traj.omega,
                  power_kw=traj.power_kw, v_hub=vhv)
-    traj_obs  = Observable(traj_norm)
-    T_max_obs = Observable(T_max_run)
-    C_max_obs = Observable(C_max_run)
+    p_obs           = Observable(p)
+    traj_obs        = Observable(traj_norm)
+    T_max_obs       = Observable(T_max_run)
+    C_max_obs       = Observable(C_max_run)
+    P_max_obs       = Observable(maximum(traj_norm.power_kw))
+    omega_max_obs   = Observable(maximum(abs.(traj_norm.omega)))
+    v_max_obs       = Observable(maximum(vhv))
+    alpha_s_max_obs = Observable(maximum(abs.(traj_norm.alpha_tot)) / n_seg)
 
     fig = Figure(size=(1600, 900))
 
@@ -428,13 +470,18 @@ function build_trpt_scene(p::SystemParams, traj)
     colsize!(right, 1, Fixed(330))
     colsize!(right, 2, Fixed(330))
 
-    time_slider, shaft_dir_obs = _build_controls!(ctl_l, p, traj_obs,
-                                                   T_max_obs, C_max_obs, n_frames)
+    time_slider, shaft_dir_obs = _build_controls!(ctl_l, p, p_obs, traj_obs,
+                                                   T_max_obs, C_max_obs,
+                                                   P_max_obs, omega_max_obs,
+                                                   v_max_obs, alpha_s_max_obs,
+                                                   n_frames)
     time_obs = time_slider.value
 
-    _build_3d_axes!(fig, (1, 1), p, traj_obs, shaft_dir_obs,
+    _build_3d_axes!(fig, (1, 1), p, p_obs, traj_obs, shaft_dir_obs,
                     T_max_obs, C_max_obs, time_obs)
-    _build_hud!(hud_l, p, traj_obs, time_obs, T_max_obs, C_max_obs)
+    _build_hud!(hud_l, p, p_obs, traj_obs, time_obs,
+                T_max_obs, C_max_obs,
+                P_max_obs, omega_max_obs, v_max_obs, alpha_s_max_obs)
 
     # Fire initial HUD update at frame 1 (callbacks registered after slider creation)
     notify(time_obs)
