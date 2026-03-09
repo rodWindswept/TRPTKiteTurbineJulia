@@ -57,6 +57,17 @@ struct SystemParams
                               # Sets the quadratic load curve for maximum power point tracking.
                               # Derived from rated torque and speed: k = τ_rated / ω_rated²
                               # Eliminates the bistability of a fixed linear damper below rated wind.
+
+    # Power limiter — elevation-angle proportional controller
+    p_rated_w  ::Float64   # Rated electrical power (W). Default: 10_000.0
+    β_min      ::Float64   # Minimum safe elevation angle (rad). Default: deg2rad(23.0)
+                           #   Floor: blade tips must clear the ground at lowest operating angle
+    β_max      ::Float64   # Maximum safe elevation angle (rad). Default: deg2rad(67.0)
+                           #   Ceiling: lifter kite pull limit (varies IRL with wind speed)
+    β_rate_max ::Float64   # Maximum elevation change rate (rad/s). Default: deg2rad(1.0)
+                           #   1 °/s — representative of lifter kite / mooring servo speed
+    kp_elev    ::Float64   # Proportional gain (rad/W/s). Default: 5e-5
+                           #   Gives ≈ 0.5 °/s elevation response per 1 kW overpower
 end
 
 """
@@ -128,6 +139,11 @@ function params_10kw()::SystemParams
                          #   k = τ_net / ω_opt² = 889 / 81.4 ≈ 10.9 → 11.0
                          #   Quadratic load law eliminates the bistability of the old linear c_pto
                          #   and gives correct MPPT at all wind speeds, not just rated.
+        10_000.0,        # p_rated_w (W) — 10 kW rated
+        deg2rad(23.0),   # β_min — blade-tip ground clearance floor
+        deg2rad(67.0),   # β_max — lifter kite ceiling
+        deg2rad(1.0),    # β_rate_max (rad/s) — 1 °/s actuation rate limit
+        5e-5,            # kp_elev (rad/W/s) — 0.5 °/s per 1 kW overpower
     )
 end
 
@@ -180,5 +196,10 @@ function mass_scale(base::SystemParams,
         base.cp,                               # aerodynamic constant, unchanged
         base.i_pto             * mass_factor * geom_scale^2,  # I ∝ m·R²: P^1.35 × P = P^2.35
         base.k_mppt            * power_ratio^2.5,             # k = τ/ω², τ ∝ P^(3/2), ω² ∝ P^(-1) → k ∝ P^(5/2)
+        base.p_rated_w  * power_ratio,        # rated power scales linearly
+        base.β_min,                            # angle does not scale
+        base.β_max,                            # angle does not scale
+        base.β_rate_max,                       # rate does not scale
+        base.kp_elev    / power_ratio,         # larger turbine: same °/s per fractional overpower
     )
 end
