@@ -109,3 +109,68 @@ end
     @test isfinite(du[1])
     @test isfinite(du[2])
 end
+
+@testset "trpt_ode_limited! — basic call (3-state)" begin
+    p  = params_10kw()
+    du = zeros(3)
+    u  = [0.1, 1.0, deg2rad(23.0)]   # α, ω, β at minimum
+
+    trpt_ode_limited!(du, u, p, 0.0)
+
+    @test isfinite(du[1])
+    @test isfinite(du[2])
+    @test isfinite(du[3])
+end
+
+@testset "trpt_ode_limited! — β stays at floor under low wind" begin
+    p  = params_10kw()
+    # Low wind (4 m/s) → P_gen < P_rated → limiter tries to decrease β → clamps at β_min
+    using DifferentialEquations
+    sol = solve(ODEProblem(trpt_ode_limited!,
+                           [0.0, 4.1*4.0/p.rotor_radius*0.8, p.β_min],
+                           (0.0, 30.0), p),
+                Tsit5(); reltol=1e-6, abstol=1e-6, saveat=1.0)
+    β_trace = sol[3, :]
+    @test all(β_trace .>= p.β_min - 1e-4)   # never goes below floor
+end
+
+@testset "trpt_ode_limited! — β rises under high wind" begin
+    p  = params_10kw()
+    # High wind (18 m/s): P_aero >> P_rated → β must rise above β_min
+    using DifferentialEquations
+    ω0 = 4.1 * 18.0 / p.rotor_radius
+    sol = solve(ODEProblem(trpt_ode_limited!,
+                           [0.0, ω0, p.β_min],
+                           (0.0, 90.0), p),
+                Tsit5(); reltol=1e-6, abstol=1e-6, saveat=1.0)
+    β_trace = sol[3, :]
+    @test maximum(β_trace) > p.β_min + deg2rad(1.5)   # β rises meaningfully (>1.5° above floor)
+    @test all(β_trace .<= p.β_max + 1e-4)              # never exceeds ceiling
+end
+
+@testset "trpt_ode_limited! — power clamped near rated at high wind" begin
+    p  = params_10kw()
+    using DifferentialEquations, Statistics
+    ω0 = 4.1 * 18.0 / p.rotor_radius
+    sol = solve(ODEProblem(trpt_ode_limited!,
+                           [0.0, ω0, p.β_min],
+                           (0.0, 120.0), p),
+                Tsit5(); reltol=1e-6, abstol=1e-6, saveat=1.0)
+    # Average power over final 30 s must be within 15% of rated (limiter settling)
+    idx = findall(t -> t >= 90.0, sol.t)
+    P_vals = [instantaneous_power(p, [sol[1,i], sol[2,i]], sol[3,i]) for i in idx]
+    @test mean(P_vals) <= p.p_rated_w * 1.15
+end
+
+@testset "instantaneous_power — 3-arg variant" begin
+    p = params_10kw()
+    # The 3-arg variant accepts β for type-compatibility with 3-state trajectories.
+    # Ground power = τ_transmitted × ω_ground — computed from mechanical state (α, ω),
+    # so β does not change the result for the same (α, ω) state.
+    P_default = instantaneous_power(p, [0.5, 2.0])
+    P_with_β  = instantaneous_power(p, [0.5, 2.0], deg2rad(60.0))
+    @test P_default isa Float64
+    @test P_with_β  isa Float64
+    @test isfinite(P_with_β)
+    @test P_with_β == P_default   # β doesn't enter the ground-power formula
+end

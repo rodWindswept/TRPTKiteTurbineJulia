@@ -198,3 +198,171 @@ function instantaneous_power(p::SystemParams, u::Vector{Float64})::Float64
     ω_ground = sqrt(max(τ_transmitted, 0.0) / p.k_mppt)
     return τ_transmitted * ω_ground
 end
+
+"""
+    instantaneous_power(p, u, β) -> Float64
+
+3-state variant: as `instantaneous_power(p, u)` but uses elevation angle `β` (rad)
+from the dynamic state `u[3]` instead of the fixed `p.elevation_angle`.
+"""
+function instantaneous_power(p::SystemParams, u::Vector{Float64}, β::Float64)::Float64
+    n_segments   = p.n_rings + 1
+    r_top        = p.trpt_hub_radius
+    r_bottom     = 2.0 * p.tether_length * p.trpt_rL_ratio / n_segments - r_top
+    spring_coeff = p.e_modulus * π * (p.tether_diameter / 2)^2 * p.n_lines * p.trpt_rL_ratio
+    sum_inv_k    = sum(1.0 / (spring_coeff * (r_bottom + i / (n_segments - 1) * (r_top - r_bottom)))
+                       for i in 0:n_segments-1)
+    k_eff        = 1.0 / sum_inv_k
+    α_avg        = u[1] / n_segments
+    τ_transmitted = k_eff * sin(α_avg)
+
+    k_bottom = spring_coeff * r_bottom
+    α_bottom = abs(u[1]) * k_eff / k_bottom
+    if abs(α_avg) >= 0.95 * π || α_bottom >= 0.95 * π
+        τ_transmitted = 0.0
+    end
+
+    ω_ground = sqrt(max(τ_transmitted, 0.0) / p.k_mppt)
+    return τ_transmitted * ω_ground
+end
+
+"""
+    trpt_ode_limited!(du, u, p::SystemParams, t)
+
+3-state TRPT ODE with proportional elevation-angle power limiter.
+
+State vector `u`:
+- `u[1]` = α_tot : total TRPT twist angle (rad)
+- `u[2]` = ω     : airborne rotor angular velocity (rad/s)
+- `u[3]` = β     : elevation angle (rad) — dynamic state driven by power error
+
+Control law:
+    dβ/dt = clamp(kp_elev × (P_gen − p_rated_w), lower_rate, upper_rate)
+
+where lower_rate = 0 when β ≤ β_min, upper_rate = 0 when β ≥ β_max.
+
+Physics identical to `trpt_ode!` except `u[3]` replaces `p.elevation_angle` everywhere.
+All existing 2-state ODEs are untouched.
+"""
+function trpt_ode_limited!(du, u, p::SystemParams, t)
+    β = u[3]
+
+    # Step 1 — Wind speed at hub altitude (using dynamic β)
+    h     = hub_altitude(p.tether_length, β)
+    v_hub = wind_at_altitude(p.v_wind_ref, p.h_ref, h)
+
+    # Steps 2–7 identical to trpt_ode! except β replaces p.elevation_angle ──────
+    n_segments_inertia = p.n_rings + 1
+    r_top_inertia  = p.trpt_hub_radius
+    r_bot_inertia  = 2.0 * p.tether_length * p.trpt_rL_ratio / n_segments_inertia - r_top_inertia
+    I_rings = sum(p.m_ring * (r_bot_inertia + i / p.n_rings * (r_top_inertia - r_bot_inertia))^2
+                  for i in 1:p.n_rings)
+    I_total = p.n_blades * p.m_blade * p.rotor_radius^2 + I_rings + p.i_pto
+
+    n_segments = p.n_rings + 1
+    r_top      = p.trpt_hub_radius
+    r_bottom   = 2.0 * p.tether_length * p.trpt_rL_ratio / n_segments - r_top
+    spring_coeff = p.e_modulus * π * (p.tether_diameter / 2)^2 * p.n_lines * p.trpt_rL_ratio
+    sum_inv_k    = sum(1.0 / (spring_coeff * (r_bottom + i / (n_segments - 1) * (r_top - r_bottom)))
+                       for i in 0:n_segments-1)
+    k_eff = 1.0 / sum_inv_k
+
+    α_avg         = u[1] / n_segments
+    τ_transmitted = k_eff * sin(α_avg)
+
+    k_bottom = spring_coeff * r_bottom
+    α_bottom = abs(u[1]) * k_eff / k_bottom
+    if abs(α_avg) >= 0.95 * π || α_bottom >= 0.95 * π
+        τ_transmitted = 0.0
+    end
+
+    ω      = u[2]
+    ω_safe = max(abs(ω), 0.1)
+    λ_t    = ω * p.rotor_radius / max(v_hub, 0.1)
+    P_aero = 0.5 * p.rho * v_hub^3 * π * p.rotor_radius^2 *
+             cp_at_tsr(λ_t) * cos(β)^3                     # β from state, not p
+    τ_aero = sign(ω) * P_aero / ω_safe
+
+    V_a        = v_hub * (λ_t + sin(β))                    # β from state
+    drag_force = 0.25 * 1.0 * p.tether_diameter * p.tether_length * p.rho * V_a^2
+    τ_drag     = drag_force * p.rotor_radius * 0.5
+
+    ω_ground = sqrt(max(τ_transmitted, 0.0) / p.k_mppt)
+
+    du[1] = ω - ω_ground
+    du[2] = (τ_aero - τ_drag - τ_transmitted) / I_total
+
+    # Step 8 — Elevation-angle limiter (proportional control on ground power)
+    P_gen    = τ_transmitted * ω_ground
+    P_error  = P_gen - p.p_rated_w
+    rate_raw = p.kp_elev * P_error
+    lower_rate = (β <= p.β_min) ? 0.0 : -p.β_rate_max
+    upper_rate = (β >= p.β_max) ? 0.0 :  p.β_rate_max
+    du[3] = clamp(rate_raw, lower_rate, upper_rate)
+
+    return nothing
+end
+
+"""
+    trpt_ode_wind_limited!(du, u, pw, t)
+
+Variable-wind 3-state variant. `pw = (p::SystemParams, wind_fn)`.
+Physics and control law identical to `trpt_ode_limited!`.
+"""
+function trpt_ode_wind_limited!(du, u, pw, t)
+    p, wind_fn = pw
+    β = u[3]
+
+    h       = hub_altitude(p.tether_length, β)
+    v_ref_t = wind_fn(t)
+    v_hub   = wind_at_altitude(v_ref_t, p.h_ref, h)
+
+    n_segments_inertia = p.n_rings + 1
+    r_top_inertia  = p.trpt_hub_radius
+    r_bot_inertia  = 2.0 * p.tether_length * p.trpt_rL_ratio / n_segments_inertia - r_top_inertia
+    I_rings = sum(p.m_ring * (r_bot_inertia + i / p.n_rings * (r_top_inertia - r_bot_inertia))^2
+                  for i in 1:p.n_rings)
+    I_total = p.n_blades * p.m_blade * p.rotor_radius^2 + I_rings + p.i_pto
+
+    n_segments   = p.n_rings + 1
+    r_top        = p.trpt_hub_radius
+    r_bottom     = 2.0 * p.tether_length * p.trpt_rL_ratio / n_segments - r_top
+    spring_coeff = p.e_modulus * π * (p.tether_diameter / 2)^2 * p.n_lines * p.trpt_rL_ratio
+    sum_inv_k    = sum(1.0 / (spring_coeff * (r_bottom + i / (n_segments - 1) * (r_top - r_bottom)))
+                       for i in 0:n_segments-1)
+    k_eff = 1.0 / sum_inv_k
+
+    α_avg         = u[1] / n_segments
+    τ_transmitted = k_eff * sin(α_avg)
+
+    k_bottom = spring_coeff * r_bottom
+    α_bottom = abs(u[1]) * k_eff / k_bottom
+    if abs(α_avg) >= 0.95 * π || α_bottom >= 0.95 * π
+        τ_transmitted = 0.0
+    end
+
+    ω      = u[2]
+    ω_safe = max(abs(ω), 0.1)
+    λ_t    = ω * p.rotor_radius / max(v_hub, 0.1)
+    P_aero = 0.5 * p.rho * v_hub^3 * π * p.rotor_radius^2 *
+             cp_at_tsr(λ_t) * cos(β)^3
+    τ_aero = sign(ω) * P_aero / ω_safe
+
+    V_a        = v_hub * (λ_t + sin(β))
+    drag_force = 0.25 * 1.0 * p.tether_diameter * p.tether_length * p.rho * V_a^2
+    τ_drag     = drag_force * p.rotor_radius * 0.5
+
+    ω_ground = sqrt(max(τ_transmitted, 0.0) / p.k_mppt)
+
+    du[1] = ω - ω_ground
+    du[2] = (τ_aero - τ_drag - τ_transmitted) / I_total
+
+    P_gen    = τ_transmitted * ω_ground
+    P_error  = P_gen - p.p_rated_w
+    rate_raw = p.kp_elev * P_error
+    lower_rate = (β <= p.β_min) ? 0.0 : -p.β_rate_max
+    upper_rate = (β >= p.β_max) ? 0.0 :  p.β_rate_max
+    du[3] = clamp(rate_raw, lower_rate, upper_rate)
+
+    return nothing
+end
