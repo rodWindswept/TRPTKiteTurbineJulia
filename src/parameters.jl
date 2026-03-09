@@ -53,7 +53,10 @@ struct SystemParams
 
     # Ground station — Mass Scaling PDF §"Drivetrain Mass and Inertia Matching"
     i_pto::Float64            # Total PTO rotational inertia (kg·m²)
-    c_pto::Float64            # PTO damping coefficient (N·m·s/rad)
+    k_mppt::Float64           # MPPT gain constant k (N·m·s²/rad²): τ_gen = k × ω_ground²
+                              # Sets the quadratic load curve for maximum power point tracking.
+                              # Derived from rated torque and speed: k = τ_rated / ω_rated²
+                              # Eliminates the bistability of a fixed linear damper below rated wind.
 end
 
 """
@@ -119,10 +122,12 @@ function params_10kw()::SystemParams
         m_blade,         # m_blade (kg)
         0.22,            # cp — AeroDyn BEM (Rotor_TRTP_Sizing_Iteration2.xlsx); peak reference value
         i_pto,           # i_pto (kg·m²)
-        100.0,           # c_pto (N·m·s/rad) — tuned for optimal TSR λ≈4.1 at rated wind (11 m/s)
-                         #   Derivation: ω_opt = 4.1×11/5 = 9.02 rad/s; τ_net = P/ω − τ_drag ≈ 839 N·m
-                         #   c_pto = τ_net / ω_opt ≈ 93 → rounded to 100; formerly 5000 (Framework PDF §5.3,
-                         #   which did not account for TSR-dependent Cp — now corrected via BEM tables).
+        11.0,            # k_mppt (N·m·s²/rad²) — MPPT gain: τ_gen = k × ω²
+                         #   Derivation: ω_opt = λ_opt × v_rated / R = 4.1 × 11 / 5 = 9.02 rad/s
+                         #   τ_net = τ_aero − τ_drag ≈ 889 N·m at rated operating point
+                         #   k = τ_net / ω_opt² = 889 / 81.4 ≈ 10.9 → 11.0
+                         #   Quadratic load law eliminates the bistability of the old linear c_pto
+                         #   and gives correct MPPT at all wind speeds, not just rated.
     )
 end
 
@@ -146,7 +151,7 @@ Scale a SystemParams to a new rated power using:
 - Empirical mass exponent 1.35 (Mass Scaling PDF §"The Empirical Mass Exponent"):
   m_scaled = m_base × (target/base)^1.35
 - PTO inertia: I ∝ m × R² → exponent = 1.35 + 2×(1/2) = 2.35
-- PTO damping: c_pto ∝ P/ω² where ω ∝ P^(-1/2) → c_pto ∝ P^2
+- MPPT gain: k_mppt = τ/ω² where τ ∝ P^(3/2), ω² ∝ P^(-1) → k_mppt ∝ P^(5/2)
 """
 function mass_scale(base::SystemParams,
                     base_power_kw::Float64,
@@ -174,6 +179,6 @@ function mass_scale(base::SystemParams,
         base.m_blade           * mass_factor,
         base.cp,                               # aerodynamic constant, unchanged
         base.i_pto             * mass_factor * geom_scale^2,  # I ∝ m·R²: P^1.35 × P = P^2.35
-        base.c_pto             * power_ratio^2,               # c = P/ω², ω ∝ P^(-1/2) → c ∝ P²
+        base.k_mppt            * power_ratio^2.5,             # k = τ/ω², τ ∝ P^(3/2), ω² ∝ P^(-1) → k ∝ P^(5/2)
     )
 end

@@ -20,8 +20,12 @@ const SETTLE_TIME   = 60.0            # allow 60 s for steady state
 const SAMPLE_START  = 50.0            # average power over final 10 s
 
 function steady_power_kw(p::SystemParams, v_ref::Float64)::Float64
+    # Warm-start near optimal TSR so MPPT controller locks on quickly
+    h_hub = hub_altitude(p.tether_length, p.elevation_angle)
+    v_hub = wind_at_altitude(v_ref, p.h_ref, h_hub)
+    ω0 = 4.1 * v_hub / p.rotor_radius   # λ_opt × v_hub / R
     wind_fn = steady_wind(v_ref)
-    sol = solve(ODEProblem(trpt_ode_wind!, [0.0, 1.0], (0.0, SETTLE_TIME), (p, wind_fn)),
+    sol = solve(ODEProblem(trpt_ode_wind!, [0.0, ω0], (0.0, SETTLE_TIME), (p, wind_fn)),
                 Tsit5(); reltol=1e-6, abstol=1e-6, saveat=0.1)
     sol.retcode == ReturnCode.Success || return NaN
     # Average power during final 10 s (steady state)

@@ -28,7 +28,7 @@ Physics pipeline:
    ground-end segment stress twist ≥ 0.95π (stress).
 6. Aerodynamic power and torque on the rotor disc.
 7. Tether drag (Tulloch model), expressed as an equivalent braking torque.
-8. Ground PTO angular velocity derived from damping law: τ = c_pto × ω_ground.
+8. Ground PTO angular velocity from MPPT law: τ = k_mppt × ω_ground².
 9. Equations of motion assembled from the above quantities.
 """
 function trpt_ode!(du, u, p::SystemParams, t)
@@ -93,8 +93,8 @@ function trpt_ode!(du, u, p::SystemParams, t)
     drag_force = 0.25 * 1.0 * p.tether_diameter * p.tether_length * p.rho * V_a^2
     τ_drag    = drag_force * p.rotor_radius * 0.5
 
-    # Step 8 — Ground PTO angular velocity (damping law: τ = c_pto × ω_ground)
-    ω_ground = τ_transmitted / p.c_pto
+    # Step 8 — Ground PTO angular velocity (MPPT law: τ = k_mppt × ω_ground²)
+    ω_ground = sqrt(max(τ_transmitted, 0.0) / p.k_mppt)
 
     # Step 9 — Equations of motion
     du[1] = ω - ω_ground                                          # dα_tot/dt
@@ -157,7 +157,7 @@ function trpt_ode_wind!(du, u, pw, t)
     drag_force = 0.25 * 1.0 * p.tether_diameter * p.tether_length * p.rho * V_a^2
     τ_drag     = drag_force * p.rotor_radius * 0.5
 
-    ω_ground = τ_transmitted / p.c_pto
+    ω_ground = sqrt(max(τ_transmitted, 0.0) / p.k_mppt)
 
     du[1] = ω - ω_ground
     du[2] = (τ_aero - τ_drag - τ_transmitted) / I_total
@@ -173,7 +173,7 @@ Return the electrical power extracted by the PTO (W) at ODE state `u`.
 Computed as P = τ_transmitted × ω_ground, where:
 - τ_transmitted is the torsional torque from the effective series stiffness of the
   tapered TRPT (k_eff from segments in series, each with k_i = E π (d/2)² n_lines r_i rL),
-- ω_ground = τ_transmitted / c_pto is the PTO shaft angular velocity.
+- ω_ground = √(τ_transmitted / k_mppt) is the PTO shaft angular velocity.
 
 Applies the collapse guard: returns 0 W when average segment twist ≥ 0.95π (kinematic
 collapse) or ground-end segment stress twist ≥ 0.95π (stress-driven collapse).
@@ -195,6 +195,6 @@ function instantaneous_power(p::SystemParams, u::Vector{Float64})::Float64
         τ_transmitted = 0.0
     end
 
-    ω_ground = τ_transmitted / p.c_pto
+    ω_ground = sqrt(max(τ_transmitted, 0.0) / p.k_mppt)
     return τ_transmitted * ω_ground
 end

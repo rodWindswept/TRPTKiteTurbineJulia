@@ -346,7 +346,7 @@ function _build_controls!(layout, p, p_obs, traj_obs,
     Label(layout[10, 1], "Simulation Re-run"; fontsize=13, font=:bold, halign=:left)
     enable_toggle = Toggle(layout[11, 1])
     Label(layout[11, 2], "Unlock re-run"; halign=:left)
-    Label(layout[12, 1], "Replaces trajectory · uses β, V_ref, c_pto below";
+    Label(layout[12, 1], "Replaces trajectory · uses β, V_ref, k_mppt below";
           halign=:left, fontsize=9, color=:grey60)
 
     Label(layout[13, 1], "Wind speed  V_ref (m/s)"; halign=:left)
@@ -357,21 +357,21 @@ function _build_controls!(layout, p, p_obs, traj_obs,
         v_wind_lbl.text[] = @sprintf("%.1f m/s", v)
     end
 
-    Label(layout[16, 1], "Generator braking  c_pto (N·m·s/rad)"; halign=:left)
-    c_pto_range = vcat([0.0], exp10.(range(0.0, log10(50000.0), length=199)))
-    c_pto_slider = Slider(layout[17, 1]; range=c_pto_range, startvalue=p.c_pto)
-    c_pto_lbl = Label(layout[18, 1],
-                      @sprintf("%.0f N·m·s/rad", p.c_pto); halign=:left)
-    on(c_pto_slider.value) do v
-        c_pto_lbl.text[] = v == 0.0 ? "0  (freewheel)" :
-                                       @sprintf("%.0f N·m·s/rad", v)
+    Label(layout[16, 1], "MPPT gain  k_mppt (N·m·s²/rad²)"; halign=:left)
+    k_mppt_range = vcat([0.0], exp10.(range(-1.0, log10(5000.0), length=199)))
+    k_mppt_slider = Slider(layout[17, 1]; range=k_mppt_range, startvalue=p.k_mppt)
+    k_mppt_lbl = Label(layout[18, 1],
+                       @sprintf("%.2f N·m·s²/rad²", p.k_mppt); halign=:left)
+    on(k_mppt_slider.value) do v
+        k_mppt_lbl.text[] = v == 0.0 ? "0  (freewheel)" :
+                                        @sprintf("%.2f N·m·s²/rad²", v)
     end
 
     rerun_btn = Button(layout[19, 1]; label="Re-run ODE (120 s)")
     on(rerun_btn.clicks) do _
         enable_toggle.active[] || return
 
-        c_new   = c_pto_slider.value[]
+        k_new   = k_mppt_slider.value[]
         v_new   = v_wind_slider.value[]
         β_new   = deg2rad(elev_slider.value[])   # shaft tilt from elevation slider
         p_new = SystemParams(p.rho, v_new, p.h_ref, β_new,
@@ -379,7 +379,7 @@ function _build_controls!(layout, p, p_obs, traj_obs,
                              p.rotor_radius, p.tether_length, p.trpt_hub_radius,
                              p.trpt_rL_ratio, p.n_lines, p.tether_diameter,
                              p.e_modulus, p.n_rings, p.m_ring, p.n_blades,
-                             p.m_blade, p.cp, p.i_pto, c_new)
+                             p.m_blade, p.cp, p.i_pto, k_new)
 
         solver = if solver_menu.selection[] == "Tsit5"
             Tsit5()
